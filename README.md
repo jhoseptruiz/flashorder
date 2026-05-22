@@ -1,4 +1,4 @@
-# FlashOrder POS 🚀
+# FlashOrder POS
 
 Sistema POS y de gestión de producción omnicanal universal.
 
