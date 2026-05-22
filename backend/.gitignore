@@ -1,0 +1,13 @@
+# Variables de entorno (nunca subir al repositorio)
+.env
+.env.local
+
+# Dependencias
+node_modules/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Build
+dist/
