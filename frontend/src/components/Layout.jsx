@@ -2,6 +2,8 @@ import { useEffect } from "react";
 import Sidebar, { NAV }  from "./Sidebar";
 import Config   from "../pages/Config";
 import Home     from "../pages/Home";
+import Usuarios from "../pages/Usuarios";
+
 
 export default function Layout({ navKey, setNavKey, user, onLogout }) {
   useEffect(() => {
@@ -19,6 +21,7 @@ export default function Layout({ navKey, setNavKey, user, onLogout }) {
 
   const renderPage = () => {
     if (navKey === "config") return <Config />;
+    if (navKey === "usuarios") return <Usuarios user={user} />;
     return <Home navKey={navKey} />;
   };
 

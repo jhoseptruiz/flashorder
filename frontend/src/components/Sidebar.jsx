@@ -7,9 +7,9 @@ export const NAV = [
   { icon: "ti-calendar",         label: "Pedidos y Calendario", key: "orders",    roles: ["admin", "empleado", "cocinero"] },
   //{ icon: "ti-users",            label: "Clientes CRM",        key: "clients",   roles: ["admin", "empleado"] },
   { icon: "ti-receipt",          label: "Boletas y Facturas",  key: "invoices",  roles: ["admin", "empleado"] },
+  { icon: "ti-users",            label: "Usuarios",            key: "usuarios",  roles: ["admin"] },
   { icon: "ti-settings",         label: "Configuración",       key: "config",    roles: ["admin"] },
 ];
-
 export default function Sidebar({ navKey, setNavKey, user, onLogout }) {
   const { primary, appName, appLogo } = useTheme();
 
@@ -69,11 +69,11 @@ export default function Sidebar({ navKey, setNavKey, user, onLogout }) {
             justifyContent: "center", fontSize: 14, fontWeight: 600,
             color: "#fff", flexShrink: 0,
           }}>
-            {user?.name?.[0] || "U"}
+            {(user?.name || user?.full_name || user?.email || "U")?.[0]?.toUpperCase() || "U"}
           </div>
           <div style={{ overflow: "hidden" }}>
             <div style={{ fontSize: 13, fontWeight: 500, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-              {user?.name}
+              {user?.name || user?.full_name || user?.email || "Usuario"}
             </div>
             <div style={{ fontSize: 11, color: "var(--text2)" }}>{user?.role}</div>
           </div>
