@@ -1,8 +1,22 @@
-import Sidebar  from "./Sidebar";
+import { useEffect } from "react";
+import Sidebar, { NAV }  from "./Sidebar";
 import Config   from "../pages/Config";
 import Home     from "../pages/Home";
 
 export default function Layout({ navKey, setNavKey, user, onLogout }) {
+  useEffect(() => {
+    if (user && navKey) {
+      const currentNav = NAV.find(n => n.key === navKey);
+      if (currentNav && currentNav.roles && !currentNav.roles.includes(user.role)) {
+        // Redirect to default page based on role
+        if (user.role === 'admin') setNavKey('dashboard');
+        else if (user.role === 'empleado') setNavKey('pos');
+        else if (user.role === 'cocinero') setNavKey('kitchen');
+        else setNavKey('dashboard');
+      }
+    }
+  }, [navKey, user, setNavKey]);
+
   const renderPage = () => {
     if (navKey === "config") return <Config />;
     return <Home navKey={navKey} />;

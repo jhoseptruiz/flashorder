@@ -4,10 +4,9 @@ services:
     image: postgres:15-alpine
     container_name: flashorder_db
     restart: unless-stopped
+    env_file: ./backend/.env
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
-      POSTGRES_DB: ${DB_NAME}
     ports:
       - "5433:5432"
     volumes:
@@ -26,19 +25,11 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    env_file: ./backend/.env
     environment:
-      PORT: 3000
-      HOST: 0.0.0.0
       DB_HOST: postgres
       DB_PORT: 5432
-      DB_NAME: ${DB_NAME}
-      DB_USER: postgres
-      DB_PASSWORD: ${DB_PASSWORD}
-      JWT_SECRET: ${JWT_SECRET}
-      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN}
-      WEBHOOK_SECRET: ${WEBHOOK_SECRET}
       NODE_ENV: production
-      FRONTEND_URL: http://localhost:5173
     ports:
       - "3000:3000"
 
@@ -48,6 +39,7 @@ services:
     restart: unless-stopped
     depends_on:
       - backend
+    env_file: ./frontend/.env
     ports:
       - "5173:5173"
 

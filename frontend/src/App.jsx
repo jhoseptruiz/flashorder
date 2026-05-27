@@ -27,7 +27,13 @@ function Inner() {
       )}
 
       {!user ? (
-        <Login onLogin={(u) => setUser(u)} />
+        <Login onLogin={(u) => {
+          setUser(u);
+          if (u.role === 'admin') setNavKey('dashboard');
+          else if (u.role === 'empleado') setNavKey('pos');
+          else if (u.role === 'cocinero') setNavKey('kitchen');
+          else setNavKey('dashboard');
+        }} />
       ) : (
         <Layout
           navKey={navKey}
