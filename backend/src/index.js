@@ -37,7 +37,7 @@ async function setupAPI() {
     await sequelize.authenticate();
     console.log("=> Base de datos conectada vía Sequelize");
     
-    await sequelize.sync({ alter: true }); 
+    await sequelize.sync();
     console.log("=> Modelos sincronizados con la base de datos");
 
     await createInitialUsers();

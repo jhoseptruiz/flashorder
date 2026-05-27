@@ -9,7 +9,7 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD}
       POSTGRES_DB: ${DB_NAME}
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./backend/src/db/schema.sql:/docker-entrypoint-initdb.d/schema.sql
@@ -38,6 +38,7 @@ services:
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN}
       WEBHOOK_SECRET: ${WEBHOOK_SECRET}
       NODE_ENV: production
+      FRONTEND_URL: http://localhost:5173
     ports:
       - "3000:3000"
 
