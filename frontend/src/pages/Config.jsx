@@ -193,13 +193,7 @@ export default function Config() {
         </div>
       </div>
 
-      {/* Guardar */}
-      <div style={{ display: "flex", justifyContent: "flex-end" }}>
-        <button className="btn-primary" onClick={save}>
-          <i className="ti ti-device-floppy" style={{ fontSize: 18 }} />
-          Guardar Cambios
-        </button>
-      </div>
+      {/* Guardar: eliminado porque los cambios se guardan automáticamente */}
     </div>
   );
 }

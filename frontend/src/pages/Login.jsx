@@ -43,8 +43,14 @@ export default function Login({ onLogin }) {
       // Guardar token en localStorage
       localStorage.setItem("accessToken", data.accessToken);
 
+      const normalizedUser = {
+        ...data.user,
+        name: data.user.full_name || data.user.name || data.user.email,
+        id: data.user.rut || data.user.id,
+      };
+
       // Pasar los datos del usuario al componente padre
-      onLogin(data.user);
+      onLogin(normalizedUser);
     } catch (err) {
       console.error("Error en login:", err);
       setError("Error de conexión con el servidor: " + err.message);

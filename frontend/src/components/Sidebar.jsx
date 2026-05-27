@@ -1,17 +1,25 @@
 import { useTheme } from "../context/ThemeContext";
 
-const NAV = [
-  { icon: "ti-layout-dashboard", label: "Dashboard",           key: "dashboard" },
-  { icon: "ti-shopping-cart",    label: "Punto de Venta",      key: "pos"       },
-  { icon: "ti-chef-hat",         label: "Cocina",              key: "kitchen"   },
-  { icon: "ti-calendar",         label: "Pedidos y Calendario", key: "orders"   },
-  //{ icon: "ti-users",            label: "Clientes CRM",        key: "clients"   },
-  { icon: "ti-receipt",          label: "Boletas y Facturas",  key: "invoices"  },
-  { icon: "ti-settings",         label: "Configuración",       key: "config"    },
-];
+
+function getNav(user) {
+  const nav = [
+    { icon: "ti-layout-dashboard", label: "Dashboard",           key: "dashboard" },
+    { icon: "ti-shopping-cart",    label: "Punto de Venta",      key: "pos"       },
+    { icon: "ti-chef-hat",         label: "Cocina",              key: "kitchen"   },
+    { icon: "ti-calendar",         label: "Pedidos y Calendario", key: "orders"   },
+    //{ icon: "ti-users",            label: "Clientes CRM",        key: "clients"   },
+    { icon: "ti-receipt",          label: "Boletas y Facturas",  key: "invoices"  },
+  ];
+  if (user?.role === "admin") {
+    nav.push({ icon: "ti-users", label: "Usuarios", key: "usuarios" });
+    nav.push({ icon: "ti-settings", label: "Configuración", key: "config" });
+  }
+  return nav;
+}
 
 export default function Sidebar({ navKey, setNavKey, user, onLogout }) {
   const { primary, appName, appLogo } = useTheme();
+  const NAV = getNav(user);
 
   return (
     <aside style={{
@@ -69,11 +77,11 @@ export default function Sidebar({ navKey, setNavKey, user, onLogout }) {
             justifyContent: "center", fontSize: 14, fontWeight: 600,
             color: "#fff", flexShrink: 0,
           }}>
-            {user?.name?.[0] || "U"}
+            {(user?.name || user?.full_name || user?.email || "U")?.[0]?.toUpperCase() || "U"}
           </div>
           <div style={{ overflow: "hidden" }}>
             <div style={{ fontSize: 13, fontWeight: 500, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-              {user?.name}
+              {user?.name || user?.full_name || user?.email || "Usuario"}
             </div>
             <div style={{ fontSize: 11, color: "var(--text2)" }}>{user?.role}</div>
           </div>
