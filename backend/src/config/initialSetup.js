@@ -1,5 +1,5 @@
 "use strict";
-import pool from "../db/db.js";
+import User from "../models/User.js";
 import { hashPassword } from "../helpers/bcrypt.helper.js";
 
 const DEFAULT_USERS = [
@@ -29,26 +29,21 @@ const DEFAULT_USERS = [
 export async function createInitialUsers() {
   try {
     for (const u of DEFAULT_USERS) {
-      // Si ya existe el RUT, omite
-      const { rows } = await pool.query(
-        "SELECT rut FROM users WHERE rut = $1",
-        [u.rut]
-      );
+      // findOrCreate busca si existe, y si no, lo inserta
+      const [user, created] = await User.findOrCreate({
+        where: { rut: u.rut },
+        defaults: {
+          fullName: u.full_name, // Mapeamos del array viejo al nuevo nombre camelCase
+          email: u.email,
+          passwordHash: await hashPassword(u.password),
+          role: u.role,
+          isActive: true
+        }
+      });
 
-      if (rows.length > 0) {
-        console.log(`=> Usuario ${u.role} ya existe, omitiendo...`);
-        continue;
+      if (created) {
+        console.log(`=> Usuario creado: ${u.email} (${u.role})`);
       }
-
-      const passwordHash = await hashPassword(u.password);
-
-      await pool.query(
-        `INSERT INTO users (rut, full_name, email, password_hash, role, is_active)
-         VALUES ($1, $2, $3, $4, $5, $6)`,
-        [u.rut, u.full_name, u.email, passwordHash, u.role, true]
-      );
-
-      console.log(`=> Usuario creado: ${u.email} (${u.role})`);
     }
   } catch (error) {
     console.error("Error en createInitialUsers:", error);

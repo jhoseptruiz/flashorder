@@ -1,6 +1,6 @@
 "use strict";
 import { SignJWT, jwtVerify } from "jose";
-import pool from "../db/db.js";
+import User from "../models/User.js";
 import { comparePassword } from "../helpers/bcrypt.helper.js";
 import { JWT_SECRET } from "../config/configEnv.js";
 
@@ -28,45 +28,32 @@ async function generateTokens(payload) {
 
 export async function loginService(email, password) {
   try {
-    console.log(`   [loginService] Buscando usuario: ${email}`);
-    const { rows } = await pool.query(
-      "SELECT * FROM users WHERE email = $1 AND is_active = TRUE",
-      [email]
-    );
+    // Buscamos el usuario usando sequelize
+    const user = await User.findOne({
+      where:{ email: email, isActive: true }
+    });
 
-    console.log(`   [loginService] Usuarios encontrados: ${rows.length}`);
-    if (rows.length === 0) {
-      console.log(`   [loginService] Usuario no encontrado: ${email}`);
-      return { error: "Email o contraseña incorrectos", status: 401 };
+    if(!user){
+      return { error: "Usuario no encontrado o inactivo", status: 401 };
     }
 
-    const user = rows[0];
-    console.log(`   [loginService] Usuario encontrado: ${user.email}`);
-
-    console.log(`   [loginService] Comparando contraseñas...`);
-    const valid = await comparePassword(password, user.password_hash);
-    console.log(`   [loginService] Contraseña válida: ${valid}`);
-    
-    if (!valid) {
-      console.log(`   [loginService] Contraseña incorrecta para: ${email}`);
-      return { error: "Email o contraseña incorrectos", status: 401 };
+    // Verificamos constraseña 
+    const valid = await comparePassword(password, user.passwordHash);
+    if(!valid){
+      return { error: "Contraseña incorrecta", status: 401 };
     }
 
-    console.log(`   [loginService] Generando tokens para: ${email}`);
-    const payload = {
-      rut:  user.rut,
-      role: user.role,
-    };
-
+    const payload = { rut: user.rut, role: user.role };
     const { accessToken, refreshToken } = await generateTokens(payload);
 
-    delete user.password_hash;
+    //Formatear el usuario para omitir el hash
+    const userData = user.toJSON();
+    delete userData.passwordHash;
 
-    console.log(`   [loginService] Login exitoso para: ${email}`);
-    return { accessToken, refreshToken, user };
-  } catch (error) {
-    console.error("[loginService] Error:", error.message, error.stack);
-    return { error: "Error interno", status: 500 };
+    return { accessToken, refreshToken, user: userData };
+  }catch (error) {
+    console.error("[loginService]", error, error.message, error.stack);
+    return { error: "Error interno del servidor", status: 500 };
   }
 }
 

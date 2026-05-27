@@ -1,11 +1,12 @@
 "use strict";
+import express from "express";
 import cors from "cors";
 import morgan from "morgan";
 import cookieParser from "cookie-parser";
-import express, { json, urlencoded } from "express";
-import { HOST, PORT } from "./config/configEnv.js";  // ← corregido
-import pool from "./db/db.js";
+import { HOST, PORT } from "./config/configEnv.js";
 import indexRoutes from "./routes/index.routes.js";
+import sequelize from "./db/db.js"; 
+import "./models/index.models.js"; 
 import { createInitialUsers } from "./config/initialSetup.js";
 
 async function setupServer() {
@@ -16,8 +17,8 @@ async function setupServer() {
     const allowedOrigin = process.env.FRONTEND_URL;
     app.use(cors({ credentials: true, origin: allowedOrigin }));
     console.log(`=> CORS configurado para: ${allowedOrigin}`);
-    app.use(urlencoded({ extended: true, limit: "1mb" }));
-    app.use(json({ limit: "1mb" }));
+    app.use(express.urlencoded({ extended: true, limit: "1mb" }));
+    app.use(express.json({ limit: "1mb" }));
     app.use(cookieParser());
     app.use(morgan("dev"));
 
@@ -33,12 +34,16 @@ async function setupServer() {
 
 async function setupAPI() {
   try {
-    await pool.query("SELECT 1");
-    console.log("=> Base de datos lista");
+    await sequelize.authenticate();
+    console.log("=> Base de datos conectada vía Sequelize");
+    
+    await sequelize.sync({ alter: true }); 
+    console.log("=> Modelos sincronizados con la base de datos");
+
     await createInitialUsers();
     await setupServer();
   } catch (error) {
-    console.log("Error en setupAPI():", error);
+    console.log("Error crítico en setupAPI():", error);
   }
 }
 
