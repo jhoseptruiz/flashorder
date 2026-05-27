@@ -28,3 +28,9 @@ build/
 
 # Antigravity CLI
 .antigravitycli/
+
+# Material de referencia local (documentos, PDFs, credenciales)
+material/
+
+# Metadata de Windows (Zone.Identifier)
+*.Zone.Identifier
