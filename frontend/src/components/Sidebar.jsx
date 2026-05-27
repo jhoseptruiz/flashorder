@@ -1,4 +1,6 @@
+import { Link, useLocation } from "react-router-dom";
 import { useTheme } from "../context/ThemeContext";
+import { useAuth } from "../context/AuthContext";
 
 export const NAV = [
   { icon: "ti-layout-dashboard", label: "Dashboard",           key: "dashboard", roles: ["admin", "empleado"] },
@@ -10,8 +12,11 @@ export const NAV = [
   { icon: "ti-users",            label: "Usuarios",            key: "usuarios",  roles: ["admin"] },
   { icon: "ti-settings",         label: "Configuración",       key: "config",    roles: ["admin"] },
 ];
-export default function Sidebar({ navKey, setNavKey, user, onLogout }) {
+
+export default function Sidebar() {
   const { primary, appName, appLogo } = useTheme();
+  const { user, logout } = useAuth();
+  const location = useLocation();
 
   return (
     <aside style={{
@@ -48,16 +53,21 @@ export default function Sidebar({ navKey, setNavKey, user, onLogout }) {
 
       {/* Nav */}
       <nav style={{ flex: 1, display: "flex", flexDirection: "column", gap: 2 }}>
-        {NAV.filter(n => !n.roles || n.roles.includes(user?.role)).map((n) => (
-          <button
-            key={n.key}
-            className={`nav-item${navKey === n.key ? " active" : ""}`}
-            onClick={() => setNavKey(n.key)}
-          >
-            <i className={`ti ${n.icon}`} style={{ fontSize: 18 }} />
-            {n.label}
-          </button>
-        ))}
+        {NAV.filter(n => !n.roles || n.roles.includes(user?.role)).map((n) => {
+          const path = `/${n.key}`;
+          const isActive = location.pathname.startsWith(path);
+          return (
+            <Link
+              key={n.key}
+              to={path}
+              className={`nav-item${isActive ? " active" : ""}`}
+              style={{ textDecoration: "none" }}
+            >
+              <i className={`ti ${n.icon}`} style={{ fontSize: 18 }} />
+              {n.label}
+            </Link>
+          );
+        })}
       </nav>
 
       {/* Usuario */}
@@ -78,7 +88,7 @@ export default function Sidebar({ navKey, setNavKey, user, onLogout }) {
             <div style={{ fontSize: 11, color: "var(--text2)" }}>{user?.role}</div>
           </div>
         </div>
-        <button className="nav-item danger" onClick={onLogout}>
+        <button className="nav-item danger" onClick={logout}>
           <i className="ti ti-logout" style={{ fontSize: 18 }} />
           Cerrar sesión
         </button>
