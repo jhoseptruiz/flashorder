@@ -1,23 +1,12 @@
-import Sidebar  from "./Sidebar";
-import Config   from "../pages/Config";
-import Home     from "../pages/Home";
+import { Outlet } from "react-router-dom";
+import Sidebar from "./Sidebar";
 
-export default function Layout({ navKey, setNavKey, user, onLogout }) {
-  const renderPage = () => {
-    if (navKey === "config") return <Config />;
-    return <Home navKey={navKey} />;
-  };
-
+export default function Layout() {
   return (
     <div style={{ display: "flex", height: "100vh", overflow: "hidden" }}>
-      <Sidebar
-        navKey={navKey}
-        setNavKey={setNavKey}
-        user={user}
-        onLogout={onLogout}
-      />
+      <Sidebar />
       <main style={{ flex: 1, overflow: "auto", padding: "32px 36px", animation: "fadein 0.3s ease" }}>
-        {renderPage()}
+        <Outlet />
       </main>
     </div>
   );

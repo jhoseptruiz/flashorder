@@ -63,11 +63,21 @@ export async function refreshTokenService(token) {
       algorithms: ["HS256"],
     });
 
-    const newPayload = { rut: payload.rut, role: payload.role };
+    // Validar en la BD que el usuario siga existiendo y esté activo
+    const user = await User.findOne({
+      where: { rut: payload.rut, isActive: true }
+    });
+
+    if (!user) {
+      return { error: "Usuario inactivo o no encontrado", status: 401 };
+    }
+
+    // Usamos el rol actualizado de la BD por si cambió
+    const newPayload = { rut: user.rut, role: user.role };
     const { accessToken, refreshToken } = await generateTokens(newPayload);
 
     return { accessToken, refreshToken };
-  } catch {
+  } catch (err) {
     return { error: "Refresh token inválido o expirado", status: 401 };
   }
 }

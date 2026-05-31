@@ -1,8 +1,12 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useTheme } from "../context/ThemeContext";
+import { useAuth } from "../context/AuthContext";
 
-export default function Login({ onLogin }) {
+export default function Login() {
   const { primary, appName, appLogo } = useTheme();
+  const { login } = useAuth();
+  const navigate = useNavigate();
   const [email,    setEmail]   = useState("");
   const [password, setPassword] = useState("");
   const [error,    setError]   = useState("");
@@ -43,8 +47,23 @@ export default function Login({ onLogin }) {
       // Guardar token en localStorage
       localStorage.setItem("accessToken", data.accessToken);
 
-      // Pasar los datos del usuario al componente padre
-      onLogin(data.user);
+      const normalizedUser = {
+        ...data.user,
+        name: data.user.full_name || data.user.name || data.user.email,
+        id: data.user.rut || data.user.id,
+      };
+
+      localStorage.setItem("user", JSON.stringify(normalizedUser));
+
+      // Pasar los datos del usuario al contexto global
+      login(normalizedUser);
+
+      // Redirigir según el rol
+      if (normalizedUser.role === 'admin') navigate('/dashboard');
+      else if (normalizedUser.role === 'empleado') navigate('/pos');
+      else if (normalizedUser.role === 'cocinero') navigate('/kitchen');
+      else navigate('/dashboard');
+
     } catch (err) {
       console.error("Error en login:", err);
       setError("Error de conexión con el servidor: " + err.message);
