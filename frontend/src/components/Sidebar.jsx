@@ -17,12 +17,12 @@ function getNav(user) {
   return nav;
 }
 
-export default function Sidebar({ navKey, setNavKey, user, onLogout }) {
+export default function Sidebar({ isOpen = false, onClose = () => {} }) {
   const { primary, appName, appLogo } = useTheme();
   const NAV = getNav(user);
 
   return (
-    <aside style={{
+    <aside className={`sidebar ${isOpen ? "sidebar-open" : ""}`} style={ {
       width: 220,
       background: "var(--surface)",
       borderRight: "1px solid var(--border)",
@@ -52,20 +52,41 @@ export default function Sidebar({ navKey, setNavKey, user, onLogout }) {
         <span style={{ fontFamily: "Syne, sans-serif", fontWeight: 700, fontSize: 16, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
           {appName}
         </span>
+        <button
+          type="button"
+          className="sidebar-close-button"
+          onClick={onClose}
+          aria-label="Cerrar panel"
+          style={{
+            marginLeft: "auto",
+            border: "none",
+            background: "transparent",
+            color: "var(--text2)",
+            cursor: "pointer",
+            display: "none",
+          }}
+        >
+          <i className="ti ti-x" style={{ fontSize: 18 }} />
+        </button>
       </div>
 
       {/* Nav */}
-      <nav style={{ flex: 1, display: "flex", flexDirection: "column", gap: 2 }}>
-        {NAV.map((n) => (
-          <button
-            key={n.key}
-            className={`nav-item${navKey === n.key ? " active" : ""}`}
-            onClick={() => setNavKey(n.key)}
-          >
-            <i className={`ti ${n.icon}`} style={{ fontSize: 18 }} />
-            {n.label}
-          </button>
-        ))}
+      <nav className="sidebar-nav" style={{ flex: 1, display: "flex", flexDirection: "column", gap: 2 }}>
+        {NAV.filter(n => !n.roles || n.roles.includes(user?.role)).map((n) => {
+          const path = `/${n.key}`;
+          const isActive = location.pathname.startsWith(path);
+          return (
+            <Link
+              key={n.key}
+              to={path}
+              className={`nav-item${isActive ? " active" : ""}`}
+              style={{ textDecoration: "none" }}
+            >
+              <i className={`ti ${n.icon}`} style={{ fontSize: 18 }} />
+              {n.label}
+            </Link>
+          );
+        })}
       </nav>
 
       {/* Usuario */}

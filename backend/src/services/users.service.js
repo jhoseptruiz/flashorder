@@ -1,18 +1,29 @@
 "use strict";
-import pool from "../db/db.js";
+import { Op } from "sequelize";
+import User from "../models/User.js";
 import { hashPassword } from "../helpers/bcrypt.helper.js";
 
 const ALLOWED_ROLES = ["empleado", "cocinero"];
 
-export async function getAllUsersService() {
-  const { rows } = await pool.query(
-    `SELECT rut, full_name, email, role, is_active
-     FROM users
-     WHERE is_active = TRUE
-     ORDER BY full_name ASC`
-  );
+function formatUserRecord(user) {
+  return {
+    rut: user.rut,
+    full_name: user.fullName ?? user.full_name,
+    email: user.email,
+    role: user.role,
+    is_active: user.isActive ?? user.is_active,
+  };
+}
 
-  return rows;
+export async function getAllUsersService() {
+  const users = await User.findAll({
+    where: { isActive: true },
+    order: [["fullName", "ASC"]],
+    attributes: ["rut", "fullName", "email", "role", "isActive"],
+    raw: true,
+  });
+
+  return users.map(formatUserRecord);
 }
 
 export async function createUserService({ rut, full_name, email, password, role }) {
@@ -20,75 +31,95 @@ export async function createUserService({ rut, full_name, email, password, role 
     throw new Error("El rol debe ser empleado o cocinero");
   }
 
-  const existing = await pool.query(
-    `SELECT rut, email FROM users WHERE rut = $1 OR email = $2`,
-    [rut, email]
-  );
+  const existing = await User.findOne({
+    where: {
+      [Op.or]: [{ rut }, { email }],
+    },
+  });
 
-  if (existing.rows.length > 0) {
-    const conflict = existing.rows[0];
-    if (conflict.rut === rut) {
+  if (existing) {
+    if (existing.rut === rut) {
       throw new Error("Ya existe un usuario con ese RUT");
     }
     throw new Error("Ya existe un usuario con ese correo");
   }
 
   const passwordHash = await hashPassword(password);
-
-  await pool.query(
-    `INSERT INTO users (rut, full_name, email, password_hash, role, is_active)
-     VALUES ($1, $2, $3, $4, $5, TRUE)`,
-    [rut, full_name, email, passwordHash, role]
-  );
-
-  return {
+  const user = await User.create({
     rut,
-    full_name,
+    fullName: full_name,
     email,
+    passwordHash,
     role,
-    is_active: true,
-  };
+    isActive: true,
+  });
+
+  return formatUserRecord(user.get({ plain: true }));
 }
 
 export async function updateUserService(rut, updates) {
   const allowedFields = ["full_name", "email", "role"];
-  const values = [];
-  const assignments = [];
+  const updateData = {};
 
   for (const [key, value] of Object.entries(updates)) {
+    if (value === undefined || value === null) continue; // ignore absent fields
+    if (key === "password") continue; // handle below
+    if (key === "rut") {
+      updateData["rut"] = value;
+      continue;
+    }
     if (!allowedFields.includes(key)) continue;
     if (key === "role" && !ALLOWED_ROLES.includes(value)) {
       throw new Error("El rol debe ser empleado o cocinero");
     }
-    values.push(value);
-    assignments.push(`${key} = $${values.length}`);
+    updateData[key === "full_name" ? "fullName" : key] = value;
   }
 
-  if (assignments.length === 0) {
+  // allow updating only password
+  const hasPassword = typeof updates.password === "string" && updates.password.length > 0;
+
+  if (Object.keys(updateData).length === 0 && !hasPassword) {
     throw new Error("No hay campos válidos para actualizar");
   }
 
-  values.push(rut);
-
-  const { rows } = await pool.query(
-    `UPDATE users
-     SET ${assignments.join(", ")}
-     WHERE rut = $${values.length}
-     RETURNING rut, full_name, email, role, is_active`,
-    values
-  );
-
-  if (rows.length === 0) {
+  let user = await User.findByPk(rut);
+  if (!user) {
     throw new Error("Usuario no encontrado");
   }
 
-  return rows[0];
+  // If updating PK (rut), perform it first then reload instance.
+  if (updateData.rut && updateData.rut !== user.rut) {
+    // Use model-level update with returning to ensure DB change
+    const [, rows] = await User.update(
+      { rut: updateData.rut },
+      { where: { rut: user.rut }, returning: true }
+    );
+
+    // reload the user by the new PK
+    user = await User.findByPk(updateData.rut);
+
+    // remove rut from updateData to avoid reapplying
+    delete updateData.rut;
+  }
+
+  if (Object.keys(updateData).length > 0) {
+    await user.update(updateData);
+    await user.reload();
+  }
+
+  if (hasPassword) {
+    const passwordHash = await hashPassword(updates.password);
+    await user.update({ passwordHash });
+    await user.reload();
+  }
+
+  return formatUserRecord(user.get({ plain: true }));
 }
 
 export async function deleteUserService(rut) {
-  const { rowCount } = await pool.query(`DELETE FROM users WHERE rut = $1`, [rut]);
+  const deletedCount = await User.destroy({ where: { rut } });
 
-  if (rowCount === 0) {
+  if (deletedCount === 0) {
     throw new Error("Usuario no encontrado");
   }
 

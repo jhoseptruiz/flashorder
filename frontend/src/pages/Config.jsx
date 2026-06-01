@@ -37,7 +37,7 @@ export default function Config() {
   };
 
   return (
-    <div style={{ maxWidth: 760, animation: "fadein 0.3s ease" }}>
+    <div className="page-container" style={{ maxWidth: 760, margin: "0 auto", animation: "fadein 0.3s ease" }}>
 
       {/* Header */}
       <div style={{ marginBottom: 32 }}>
@@ -56,7 +56,7 @@ export default function Config() {
           <h2 style={{ fontSize: 17, fontWeight: 600, color: "var(--text)" }}>Identidad del Negocio</h2>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 28 }}>
+        <div className="responsive-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 28 }}>
 
           {/* Nombre */}
           <div>
@@ -100,7 +100,7 @@ export default function Config() {
             <label style={{ fontSize: 13, fontWeight: 500, color: "var(--text2)", display: "block", marginBottom: 8 }}>
               Icono / Logo de la Aplicación
             </label>
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <div className="config-file-row" style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
               <div style={{
                 width: 56,
                 height: 56,
@@ -161,11 +161,11 @@ export default function Config() {
             <label style={{ fontSize: 13, fontWeight: 500, color: "var(--text2)", display: "block", marginBottom: 8 }}>
               Tema de la Interfaz
             </label>
-            <div style={{ display: "flex", gap: 8 }}>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }} className="config-theme-row">
               <button
                 onClick={() => setDark(false)}
                 style={{
-                  flex: 1, padding: 10, borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: "pointer",
+                  flex: 1, minWidth: 130, padding: 10, borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: "pointer",
                   border: `1.5px solid ${!dark ? primary : "var(--border)"}`,
                   background: !dark ? primaryLight : "var(--surface)",
                   color: !dark ? primary : "var(--text2)",
@@ -178,7 +178,7 @@ export default function Config() {
               <button
                 onClick={() => setDark(true)}
                 style={{
-                  flex: 1, padding: 10, borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: "pointer",
+                  flex: 1, minWidth: 130, padding: 10, borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: "pointer",
                   border: `1.5px solid ${dark ? primary : "var(--border)"}`,
                   background: dark ? primaryLight : "var(--surface)",
                   color: dark ? primary : "var(--text2)",

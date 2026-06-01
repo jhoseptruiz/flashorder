@@ -14,6 +14,45 @@ const EMPTY_FORM = {
   role: "empleado",
 };
 
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+const normalizeRut = (raw) =>
+  String(raw || "")
+    .replace(/[\.\-]/g, "")
+    .replace(/[^0-9kK]/gi, "")
+    .toUpperCase();
+
+const formatRut = (raw) => {
+  const clean = normalizeRut(raw);
+  if (clean.length <= 1) return clean;
+
+  const dv = clean.slice(-1);
+  let body = clean.slice(0, -1);
+  const parts = [];
+
+  while (body.length > 3) {
+    parts.unshift(body.slice(-3));
+    body = body.slice(0, -3);
+  }
+
+  if (body) parts.unshift(body);
+
+  return `${parts.join(".")}-${dv}`;
+};
+
+const validateRut = (raw) => {
+  const clean = normalizeRut(raw);
+  return /^[0-9]+[0-9kK]$/.test(clean) && clean.length >= 8 && clean.length <= 10;
+};
+
+const validateEmail = (value) => EMAIL_REGEX.test(String(value || "").trim().toLowerCase());
+
+const statusStyle = (type) => ({
+  marginTop: 4,
+  fontSize: 12,
+  color: type === "success" ? "#166534" : "#b91c1c",
+});
+
 export default function Usuarios() {
   const { primary, showToast } = useTheme();
   const [usuarios, setUsuarios] = useState([]);
@@ -22,25 +61,29 @@ export default function Usuarios() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [rutStatus, setRutStatus] = useState({ message: "", type: "" });
+  const [emailStatus, setEmailStatus] = useState({ message: "", type: "" });
+  const [passwordStatus, setPasswordStatus] = useState({ message: "", type: "" });
+  const [showPassword, setShowPassword] = useState(false);
 
   const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
+  const token = localStorage.getItem("accessToken");
 
   const fetchUsers = async () => {
     try {
       setLoading(true);
       const response = await fetch(`${API_URL}/api/users`, {
         headers: {
-          Authorization: `Bearer ${localStorage.getItem("accessToken")}`,
+          Authorization: `Bearer ${token}`,
         },
       });
 
       const data = await response.json();
-
       if (!response.ok) {
         throw new Error(data.error || "No se pudieron cargar los usuarios");
       }
 
-      setUsuarios(data);
+      setUsuarios(data.map((user) => ({ ...user, rut: formatRut(user.rut) })));
     } catch (error) {
       showToast(error.message, "error");
     } finally {
@@ -50,16 +93,45 @@ export default function Usuarios() {
 
   useEffect(() => {
     fetchUsers();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const cleanInputRut = (value) => normalizeRut(value);
+
+  const handleRutChange = (event) => {
+    const rawValue = event.target.value;
+    const formattedValue = formatRut(rawValue);
+    setForm((current) => ({ ...current, rut: formattedValue }));
+    setRutStatus({ message: "", type: "" });
+  };
+
+  const handleEmailChange = (event) => {
+    const { value } = event.target;
+    setForm((current) => ({ ...current, email: value }));
+    setEmailStatus({ message: "", type: "" });
+  };
 
   const handleChange = (event) => {
     const { name, value } = event.target;
+    if (name === "rut") {
+      handleRutChange(event);
+      return;
+    }
+
+    if (name === "email") {
+      handleEmailChange(event);
+      return;
+    }
+
     setForm((current) => ({ ...current, [name]: value }));
   };
 
   const resetForm = () => {
     setEditingRut(null);
     setForm(EMPTY_FORM);
+    setRutStatus({ message: "", type: "" });
+    setEmailStatus({ message: "", type: "" });
+    setPasswordStatus({ message: "", type: "" });
   };
 
   const openCreateModal = () => {
@@ -72,48 +144,178 @@ export default function Usuarios() {
     setIsModalOpen(false);
   };
 
+  const checkRutAvailability = async (value) => {
+    const formatted = formatRut(value);
+    const cleanRut = normalizeRut(formatted);
+
+    if (!cleanRut) {
+      setRutStatus({ message: "RUT requerido", type: "error" });
+      return false;
+    }
+
+    if (!validateRut(cleanRut)) {
+      setRutStatus({ message: "Formato de RUT inválido", type: "error" });
+      return false;
+    }
+
+    try {
+      const url = `${API_URL}/api/users/check-rut?rut=${encodeURIComponent(cleanRut)}${editingRut ? `&excludeRut=${encodeURIComponent(editingRut)}` : ""}`;
+      const response = await fetch(url, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        setRutStatus({ message: data.error || "No se pudo verificar el RUT", type: "error" });
+        return false;
+      }
+
+      if (data.exists) {
+        setRutStatus({ message: "Este RUT ya está registrado", type: "error" });
+        return false;
+      }
+
+      setRutStatus({ message: "RUT disponible", type: "success" });
+      return true;
+    } catch (error) {
+      setRutStatus({ message: "Error al verificar el RUT", type: "error" });
+      return false;
+    }
+  };
+
+  const checkEmailAvailability = async (value) => {
+    const emailValue = String(value || "").trim().toLowerCase();
+    if (!emailValue) {
+      setEmailStatus({ message: "Correo electrónico requerido", type: "error" });
+      return false;
+    }
+
+    if (!validateEmail(emailValue)) {
+      setEmailStatus({ message: "Correo electrónico inválido", type: "error" });
+      return false;
+    }
+
+    try {
+      const url = `${API_URL}/api/users/check-email?email=${encodeURIComponent(emailValue)}${editingRut ? `&excludeRut=${encodeURIComponent(editingRut)}` : ""}`;
+      const response = await fetch(url, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        setEmailStatus({ message: data.error || "No se pudo verificar el correo", type: "error" });
+        return false;
+      }
+
+      if (data.exists) {
+        setEmailStatus({ message: "Este correo ya está registrado", type: "error" });
+        return false;
+      }
+
+      setEmailStatus({ message: "Correo disponible", type: "success" });
+      return true;
+    } catch (error) {
+      setEmailStatus({ message: "Error al verificar el correo", type: "error" });
+      return false;
+    }
+  };
+
+  const handleRutBlur = () => {
+    checkRutAvailability(form.rut);
+  };
+
+  const handleEmailBlur = () => {
+    checkEmailAvailability(form.email);
+  };
+
   const handleSubmit = async (event) => {
     event.preventDefault();
     setSubmitting(true);
 
     try {
-      const payload = {
-        ...form,
-      };
+      const normalizedRut = normalizeRut(form.rut);
+      const emailValue = String(form.email || "").trim().toLowerCase();
+
+      if (!normalizedRut || !validateRut(normalizedRut)) {
+        throw new Error("RUT inválido");
+      }
+
+      if (!validateEmail(emailValue)) {
+        throw new Error("Correo electrónico inválido");
+      }
+
+      if (rutStatus.type === "error") {
+        throw new Error(rutStatus.message || "Revisa el RUT antes de enviar");
+      }
+
+      if (emailStatus.type === "error") {
+        throw new Error(emailStatus.message || "Revisa el correo antes de enviar");
+      }
+
+      const pwd = String(form.password || "").trim();
 
       if (editingRut) {
+        if (pwd && pwd.length > 0 && pwd.length < 8) {
+          throw new Error("La contraseña debe tener al menos 8 caracteres");
+        }
+
+        const payload = {
+          full_name: form.full_name,
+          email: emailValue,
+          role: form.role,
+        };
+        if (normalizedRut !== editingRut) {
+          payload.rut = normalizedRut;
+        }
+        if (pwd) payload.password = pwd;
+
         const response = await fetch(`${API_URL}/api/users/${editingRut}`, {
           method: "PUT",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${localStorage.getItem("accessToken")}`,
+            Authorization: `Bearer ${token}`,
           },
-          body: JSON.stringify({
-            full_name: payload.full_name,
-            email: payload.email,
-            role: payload.role,
-          }),
+          body: JSON.stringify(payload),
         });
 
         const data = await response.json();
-        if (!response.ok) throw new Error(data.error || "No se pudo actualizar el usuario");
+        if (!response.ok) {
+          throw new Error(data.error || "No se pudo actualizar el usuario");
+        }
+
         showToast("Usuario actualizado correctamente", "success");
       } else {
-        if (!payload.password) {
+        if (!pwd) {
           throw new Error("La contraseña es obligatoria para crear un usuario");
+        }
+        if (pwd.length < 8) {
+          throw new Error("La contraseña debe tener al menos 8 caracteres");
         }
 
         const response = await fetch(`${API_URL}/api/users`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${localStorage.getItem("accessToken")}`,
+            Authorization: `Bearer ${token}`,
           },
-          body: JSON.stringify(payload),
+          body: JSON.stringify({
+            rut: normalizedRut,
+            full_name: form.full_name,
+            email: emailValue,
+            password: pwd,
+            role: form.role,
+          }),
         });
 
         const data = await response.json();
-        if (!response.ok) throw new Error(data.error || "No se pudo crear el usuario");
+        if (!response.ok) {
+          throw new Error(data.error || "No se pudo crear el usuario");
+        }
+
         showToast("Usuario creado correctamente", "success");
       }
 
@@ -127,14 +329,17 @@ export default function Usuarios() {
   };
 
   const handleEdit = (user) => {
-    setEditingRut(user.rut);
+    const normalized = normalizeRut(user.rut);
+    setEditingRut(normalized);
     setForm({
-      rut: user.rut,
+      rut: formatRut(normalized),
       full_name: user.full_name,
       email: user.email,
       password: "",
       role: user.role,
     });
+    setRutStatus({ message: "", type: "" });
+    setEmailStatus({ message: "", type: "" });
     setIsModalOpen(true);
   };
 
@@ -142,18 +347,22 @@ export default function Usuarios() {
     if (!window.confirm("¿Seguro que quieres eliminar este usuario?")) return;
 
     try {
-      const response = await fetch(`${API_URL}/api/users/${rut}`, {
+      const normalizedRut = normalizeRut(rut);
+      const response = await fetch(`${API_URL}/api/users/${normalizedRut}`, {
         method: "DELETE",
         headers: {
-          Authorization: `Bearer ${localStorage.getItem("accessToken")}`,
+          Authorization: `Bearer ${token}`,
         },
       });
 
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "No se pudo eliminar el usuario");
+      if (!response.ok) {
+        throw new Error(data.error || "No se pudo eliminar el usuario");
+      }
+
       showToast("Usuario eliminado correctamente", "success");
       await fetchUsers();
-      if (editingRut === rut) resetForm();
+      if (editingRut === normalizedRut) resetForm();
     } catch (error) {
       showToast(error.message, "error");
     }
@@ -163,8 +372,8 @@ export default function Usuarios() {
   const cocineros = usuarios.filter((user) => user.role === "cocinero");
 
   return (
-    <div style={{ maxWidth: 960, margin: "0 auto", animation: "fadein 0.3s ease" }}>
-      <div style={{ marginBottom: 24, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
+    <div className="page-container" style={{ maxWidth: 960, margin: "0 auto", animation: "fadein 0.3s ease" }}>
+      <div className="page-header" style={{ marginBottom: 24, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
         <div>
           <h1 style={{ fontFamily: "Syne, sans-serif", fontSize: 28, fontWeight: 700, color: "var(--text)", letterSpacing: "-0.3px" }}>Gestión de Usuarios</h1>
           <p style={{ fontSize: 14, color: "var(--text2)", marginTop: 4 }}>Administra usuarios con acceso al sistema y sus roles</p>
@@ -249,99 +458,141 @@ export default function Usuarios() {
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 12 }}>
-          <label style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 12, color: "var(--text2)" }}>
-            RUT
-            <input
-              className="input-field"
-              name="rut"
-              value={form.rut}
-              onChange={handleChange}
-              placeholder="11111111-1"
-              disabled={Boolean(editingRut)}
-              required
-            />
-          </label>
+            <form onSubmit={handleSubmit} className="responsive-grid" style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 12 }}>
+              <label style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 12, color: "var(--text2)" }}>
+                RUT
+                <input
+                  className="input-field"
+                  name="rut"
+                  value={form.rut}
+                  onChange={handleChange}
+                  onBlur={handleRutBlur}
+                  placeholder="11111111-1"
+                  
+                  required
+                />
+                {rutStatus.message && <span style={statusStyle(rutStatus.type)}>{rutStatus.message}</span>}
+              </label>
 
-          <label style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 12, color: "var(--text2)" }}>
-            Nombre completo
-            <input
-              className="input-field"
-              name="full_name"
-              value={form.full_name}
-              onChange={handleChange}
-              placeholder="Juan Pérez"
-              required
-            />
-          </label>
+              <label style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 12, color: "var(--text2)" }}>
+                Nombre completo
+                <input
+                  className="input-field"
+                  name="full_name"
+                  value={form.full_name}
+                  onChange={handleChange}
+                  placeholder="Juan Pérez"
+                  required
+                />
+              </label>
 
-          <label style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 12, color: "var(--text2)" }}>
-            Correo electrónico
-            <input
-              className="input-field"
-              type="email"
-              name="email"
-              value={form.email}
-              onChange={handleChange}
-              placeholder="usuario@flashorder.cl"
-              required
-            />
-          </label>
+              <label style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 12, color: "var(--text2)" }}>
+                Correo electrónico
+                <input
+                  className="input-field"
+                  type="email"
+                  name="email"
+                  value={form.email}
+                  onChange={handleChange}
+                  onBlur={handleEmailBlur}
+                  placeholder="usuario@flashorder.cl"
+                  required
+                />
+                {emailStatus.message && <span style={statusStyle(emailStatus.type)}>{emailStatus.message}</span>}
+              </label>
 
-          <label style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 12, color: "var(--text2)" }}>
-            Rol
-            <select
-              className="input-field"
-              name="role"
-              value={form.role}
-              onChange={handleChange}
-            >
-              <option value="empleado">Empleado</option>
-              <option value="cocinero">Cocinero</option>
-            </select>
-          </label>
+              <label style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 12, color: "var(--text2)" }}>
+                Rol
+                <select
+                  className="input-field"
+                  name="role"
+                  value={form.role}
+                  onChange={handleChange}
+                >
+                  <option value="empleado">Empleado</option>
+                  <option value="cocinero">Cocinero</option>
+                </select>
+              </label>
 
-          {!editingRut && (
-            <label style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 12, color: "var(--text2)", gridColumn: "1 / span 2" }}>
-              Contraseña inicial
-              <input
-                className="input-field"
-                type="password"
-                name="password"
-                value={form.password}
-                onChange={handleChange}
-                placeholder="Ingresá una contraseña"
-                required={!editingRut}
-              />
-            </label>
-          )}
+              <label style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 12, color: "var(--text2)", gridColumn: "1 / span 2", position: "relative" }}>
+                {editingRut ? "Cambiar contraseña (opcional)" : "Contraseña inicial"}
+                <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
+                  <input
+                    className="input-field"
+                    type={showPassword ? "text" : "password"}
+                    name="password"
+                    value={form.password}
+                    onChange={(e) => {
+                      handleChange(e);
+                      setPasswordStatus({ message: "", type: "" });
+                    }}
+                    onBlur={() => {
+                      const v = String(form.password || "");
+                      if (!editingRut && !v) {
+                        setPasswordStatus({ message: "La contraseña es obligatoria", type: "error" });
+                        return;
+                      }
+                      if (v && v.length > 0 && v.length < 8) {
+                        setPasswordStatus({ message: "La contraseña debe tener al menos 8 caracteres", type: "error" });
+                      } else if (v && v.length >= 8) {
+                        setPasswordStatus({ message: "Contraseña válida", type: "success" });
+                      }
+                    }}
+                    placeholder={editingRut ? "Dejar vacío para no cambiar" : "Ingresá una contraseña"}
+                    required={!editingRut}
+                    style={{ paddingRight: 40, width: "100%" }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((s) => !s)}
+                    aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+                    style={{
+                      position: "absolute",
+                      right: 8,
+                      top: 8,
+                      width: 28,
+                      height: 28,
+                      borderRadius: 6,
+                      border: "none",
+                      background: "transparent",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      cursor: "pointer",
+                    }}
+                  >
+                    <i className={`ti ${showPassword ? "ti-eye-off" : "ti-eye"}`} />
+                  </button>
+                </div>
+                {passwordStatus.message && <span style={statusStyle(passwordStatus.type)}>{passwordStatus.message}</span>}
+              </label>
 
-          <div style={{ gridColumn: "1 / span 2", display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 4 }}>
-            <button
-              type="submit"
-              disabled={submitting}
-              style={{
-                background: primary,
-                color: "#fff",
-                border: "none",
-                borderRadius: 10,
-                padding: "10px 16px",
-                fontWeight: 600,
-                fontSize: 13,
-                cursor: submitting ? "not-allowed" : "pointer",
-                opacity: submitting ? 0.7 : 1,
-              }}
-            >
-              <i className={`ti ${editingRut ? "ti-device-floppy" : "ti-user-plus"}`} style={{ marginRight: 8 }} />
-              {editingRut ? "Guardar cambios" : "Crear usuario"}
-            </button>
-          </div>
-        </form>
+              <div style={{ gridColumn: "1 / span 2", display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 4 }}>
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  style={{
+                    background: primary,
+                    color: "#fff",
+                    border: "none",
+                    borderRadius: 10,
+                    padding: "10px 16px",
+                    fontWeight: 600,
+                    fontSize: 13,
+                    cursor: submitting ? "not-allowed" : "pointer",
+                    opacity: submitting ? 0.7 : 1,
+                  }}
+                >
+                  <i className={`ti ${editingRut ? "ti-device-floppy" : "ti-user-plus"}`} style={{ marginRight: 8 }} />
+                  {editingRut ? "Guardar cambios" : "Crear usuario"}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+      <div className="responsive-grid">
         <section className="card" style={{ padding: 16 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
             <div>
@@ -357,7 +608,7 @@ export default function Usuarios() {
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               {empleados.map((user) => (
-                <UsuarioCard key={user.rut} user={user} onEdit={handleEdit} onDelete={handleDelete} highlight={editingRut === user.rut} />
+                <UsuarioCard key={user.rut} user={user} onEdit={handleEdit} onDelete={handleDelete} highlight={editingRut === normalizeRut(user.rut)} />
               ))}
             </div>
           )}
@@ -378,7 +629,7 @@ export default function Usuarios() {
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               {cocineros.map((user) => (
-                <UsuarioCard key={user.rut} user={user} onEdit={handleEdit} onDelete={handleDelete} highlight={editingRut === user.rut} />
+                <UsuarioCard key={user.rut} user={user} onEdit={handleEdit} onDelete={handleDelete} highlight={editingRut === normalizeRut(user.rut)} />
               ))}
             </div>
           )}
@@ -392,7 +643,7 @@ function UsuarioCard({ user, onEdit, onDelete, highlight }) {
   const badge = ROLES[user.role] || { label: user.role, color: "#d0d5dd" };
 
   return (
-    <article
+    <article className="user-card"
       style={{
         display: "flex",
         alignItems: "center",
@@ -451,3 +702,4 @@ function UsuarioCard({ user, onEdit, onDelete, highlight }) {
     </article>
   );
 }
+

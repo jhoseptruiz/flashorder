@@ -1,28 +1,25 @@
+import { useState } from "react";
+import { Outlet } from "react-router-dom";
+import Sidebar from "./Sidebar";
 
-import Sidebar  from "./Sidebar";
-import Config   from "../pages/Config";
-import Home     from "../pages/Home";
-import Usuarios from "../pages/Usuarios";
-
-
-export default function Layout({ navKey, setNavKey, user, onLogout }) {
-  const renderPage = () => {
-    if (navKey === "config") return <Config />;
-    if (navKey === "usuarios") return <Usuarios user={user} />;
-    return <Home navKey={navKey} />;
-  };
-
+export default function Layout() {
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   return (
-    <div style={{ display: "flex", height: "100vh", overflow: "hidden" }}>
-      <Sidebar
-        navKey={navKey}
-        setNavKey={setNavKey}
-        user={user}
-        onLogout={onLogout}
-      />
-      <main style={{ flex: 1, overflow: "auto", padding: "32px 36px", animation: "fadein 0.3s ease" }}>
-        {renderPage()}
+    <div className="app-layout" style={{ display: "flex", height: "100vh", overflow: "hidden" }}>
+      <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+      <main className="app-main" style={{ flex: 1, overflow: "auto", padding: "32px 36px", animation: "fadein 0.3s ease" }}>
+        <div className="mobile-header">
+          <button
+            type="button"
+            className="mobile-menu-button"
+            onClick={() => setSidebarOpen((open) => !open)}
+          >
+            <i className={`ti ${sidebarOpen ? "ti-menu-alt-x" : "ti-menu"}`} />
+          </button>
+        </div>
+        <Outlet />
       </main>
+      {sidebarOpen && <div className="sidebar-overlay" onClick={() => setSidebarOpen(false)} />}
     </div>
   );
 }

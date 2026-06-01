@@ -4,21 +4,21 @@ import { hashPassword } from "../helpers/bcrypt.helper.js";
 
 const DEFAULT_USERS = [
   {
-    rut:       "11111111-1",
+    rut:       "111111111",
     full_name: "Administrador",
     email:     "admin@flashorder.cl",
     password:  "admin1234",
     role:      "admin",
   },
   {
-    rut:       "22222222-2",
+    rut:       "222222222",
     full_name: "Empleado1",
     email:     "empleado@flashorder.cl",
     password:  "empleado1234",
     role:      "empleado",
   },
   {
-    rut:       "33333333-3",
+    rut:       "333333333",
     full_name: "Cocinero1",
     email:     "cocinero@flashorder.cl",
     password:  "cocinero1234",
