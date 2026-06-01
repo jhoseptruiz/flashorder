@@ -88,7 +88,7 @@ export default function Login() {
             {appName}
           </h1>
           <p style={{ fontSize: 14, color: "var(--text2)", marginTop: 4 }}>
-            Sistema de gestión para tu pastelería
+            Sistema de gestión de pedidos
           </p>
         </div>
 

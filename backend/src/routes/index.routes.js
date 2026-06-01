@@ -4,6 +4,7 @@ import authRoutes from "./auth.routes.js";
 import { authenticate } from "../middlewares/authentication.middleware.js";
 import { authorizeRoles } from "../middlewares/authorization.middleware.js";
 import usersRoutes from "./users.routes.js";
+import catalogRoutes from "./catalog.routes.js";
 
 const router = Router();
 
@@ -15,6 +16,7 @@ router.get("/", (req, res) => {
 // Rutas de autenticación
 router.use("/auth", authRoutes);
 router.use("/users", usersRoutes);
+router.use("/catalog", catalogRoutes);
 
 // Ejemplo de ruta protegida para el futuro (solo admin y empleado)
 router.get("/dashboard-stats", authenticate, authorizeRoles("admin", "empleado"), (req, res) => {
