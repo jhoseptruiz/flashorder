@@ -16,6 +16,12 @@ const CustomerOrder = sequelize.define("CustomerOrder", {
   totalAmount: {
     type: DataTypes.BIGINT, // BIGINT para CLP
     allowNull: false,
+    defaultValue: 0,
+  },
+  depositAmount: {
+    type: DataTypes.BIGINT,
+    allowNull: false,
+    defaultValue: 0,
   },
   source: {
     type: DataTypes.ENUM('local', 'uber_eats'),

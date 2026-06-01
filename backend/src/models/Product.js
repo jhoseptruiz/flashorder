@@ -15,9 +15,9 @@ const Product = sequelize.define("Product", {
     type: DataTypes.BOOLEAN,
     defaultValue: false,
   },
-  externalID:{
-    type: DataTypes.BOOLEAN,
-    defaultValue: false,
+  externalId: {
+    type: DataTypes.STRING(100),
+    unique: true,
   },
   isActive: {
     type: DataTypes.BOOLEAN,
