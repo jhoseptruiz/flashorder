@@ -1,25 +1,22 @@
+import { Link, useLocation } from "react-router-dom";
 import { useTheme } from "../context/ThemeContext";
+import { useAuth } from "../context/AuthContext";
 
-
-function getNav(user) {
-  const nav = [
-    { icon: "ti-layout-dashboard", label: "Dashboard",           key: "dashboard" },
-    { icon: "ti-shopping-cart",    label: "Punto de Venta",      key: "pos"       },
-    { icon: "ti-chef-hat",         label: "Cocina",              key: "kitchen"   },
-    { icon: "ti-calendar",         label: "Pedidos y Calendario", key: "orders"   },
-    //{ icon: "ti-users",            label: "Clientes CRM",        key: "clients"   },
-    { icon: "ti-receipt",          label: "Boletas y Facturas",  key: "invoices"  },
-  ];
-  if (user?.role === "admin") {
-    nav.push({ icon: "ti-users", label: "Usuarios", key: "usuarios" });
-    nav.push({ icon: "ti-settings", label: "Configuración", key: "config" });
-  }
-  return nav;
-}
+export const NAV = [
+  { icon: "ti-layout-dashboard", label: "Dashboard",           key: "dashboard", roles: ["admin", "empleado"] },
+  { icon: "ti-shopping-cart",    label: "Punto de Venta",      key: "pos",       roles: ["admin", "empleado"] },
+  { icon: "ti-chef-hat",         label: "Cocina",              key: "kitchen",   roles: ["admin", "cocinero"] },
+  { icon: "ti-calendar",         label: "Pedidos y Calendario", key: "orders",    roles: ["admin", "empleado", "cocinero"] },
+  //{ icon: "ti-users",            label: "Clientes CRM",        key: "clients",   roles: ["admin", "empleado"] },
+  { icon: "ti-receipt",          label: "Boletas y Facturas",  key: "invoices",  roles: ["admin", "empleado"] },
+  { icon: "ti-users",            label: "Usuarios",            key: "usuarios",  roles: ["admin"] },
+  { icon: "ti-settings",         label: "Configuración",       key: "config",    roles: ["admin"] },
+];
 
 export default function Sidebar({ isOpen = false, onClose = () => {} }) {
   const { primary, appName, appLogo } = useTheme();
-  const NAV = getNav(user);
+  const { user, logout } = useAuth();
+  const location = useLocation();
 
   return (
     <aside className={`sidebar ${isOpen ? "sidebar-open" : ""}`} style={ {
@@ -107,7 +104,7 @@ export default function Sidebar({ isOpen = false, onClose = () => {} }) {
             <div style={{ fontSize: 11, color: "var(--text2)" }}>{user?.role}</div>
           </div>
         </div>
-        <button className="nav-item danger" onClick={onLogout}>
+        <button className="nav-item danger" onClick={logout}>
           <i className="ti ti-logout" style={{ fontSize: 18 }} />
           Cerrar sesión
         </button>

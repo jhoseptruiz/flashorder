@@ -1,7 +1,6 @@
 "use strict";
 import { jwtVerify } from "jose";
-import { JWT_SECRET } from "../../config/configEnv.js";
-import { respondError } from "../handlers/responseHandlers.js";
+import { JWT_SECRET } from "../config/configEnv.js";
 
 const ACCESS_SECRET = new TextEncoder().encode(JWT_SECRET);
 
@@ -11,7 +10,7 @@ export async function authenticate(req, res, next) {
     const token = authHeader?.split(" ")[1]; // Bearer <token>
 
     if (!token) {
-      return respondError(req, res, 401, "Token de acceso requerido");
+      return res.status(401).json({ error: "Token de acceso requerido" });
     }
 
     const { payload } = await jwtVerify(token, ACCESS_SECRET, {
@@ -21,6 +20,6 @@ export async function authenticate(req, res, next) {
     req.user = payload;
     next();
   } catch {
-    return respondError(req, res, 401, "Token inválido o expirado");
+    return res.status(401).json({ error: "Token inválido o expirado" });
   }
 }

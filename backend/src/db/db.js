@@ -1,25 +1,23 @@
 "use strict";
-import pg from "pg";
+import { Sequelize} from "sequelize";
 import {
-  DB_USER,
-  DB_HOST,
   DB_NAME,
+  DB_USER,
   DB_PASSWORD,
+  DB_HOST,
   DB_PORT,
 } from "../config/configEnv.js";
 
-const { Pool } = pg;
-
-const pool = new Pool({
-  user:     DB_USER,
-  host:     DB_HOST,
-  database: DB_NAME,
-  password: DB_PASSWORD,
-  port:     DB_PORT,
+const sequelize = new Sequelize(DB_NAME, DB_USER, DB_PASSWORD, {
+  host: DB_HOST,
+  port: Number(DB_PORT),
+  dialect: "postgres",
+  logging: false,
+  define:{
+    timestamps: false,
+    underscored: true,
+    freezeTableName: true,
+  },
 });
 
-pool.connect()
-  .then(() => console.log("=> Conectado a PostgreSQL correctamente"))
-  .catch((err) => console.error("Error conectando a PostgreSQL:", err));
-
-export default pool; // borrar después
+export default sequelize;
