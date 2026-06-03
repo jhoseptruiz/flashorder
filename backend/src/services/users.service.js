@@ -1,5 +1,6 @@
 "use strict";
 import { Op } from "sequelize";
+import sequelize from "../db/db.js";
 import User from "../models/User.js";
 import { hashPassword } from "../helpers/bcrypt.helper.js";
 
@@ -62,8 +63,8 @@ export async function updateUserService(rut, updates) {
   const updateData = {};
 
   for (const [key, value] of Object.entries(updates)) {
-    if (value === undefined || value === null) continue; // ignore absent fields
-    if (key === "password") continue; // handle below
+    if (value === undefined || value === null) continue; 
+    if (key === "password") continue; 
     if (key === "rut") {
       updateData["rut"] = value;
       continue;
@@ -75,7 +76,7 @@ export async function updateUserService(rut, updates) {
     updateData[key === "full_name" ? "fullName" : key] = value;
   }
 
-  // allow updating only password
+
   const hasPassword = typeof updates.password === "string" && updates.password.length > 0;
 
   if (Object.keys(updateData).length === 0 && !hasPassword) {
@@ -87,18 +88,16 @@ export async function updateUserService(rut, updates) {
     throw new Error("Usuario no encontrado");
   }
 
-  // If updating PK (rut), perform it first then reload instance.
+  
   if (updateData.rut && updateData.rut !== user.rut) {
-    // Use model-level update with returning to ensure DB change
+    
     const [, rows] = await User.update(
       { rut: updateData.rut },
       { where: { rut: user.rut }, returning: true }
     );
 
-    // reload the user by the new PK
     user = await User.findByPk(updateData.rut);
 
-    // remove rut from updateData to avoid reapplying
     delete updateData.rut;
   }
 

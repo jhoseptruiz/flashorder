@@ -3,7 +3,6 @@ const NAV_LABELS = {
   pos:       "Punto de Venta",
   kitchen:   "Cocina",
   orders:    "Pedidos y Calendario",
-  clients:   "Clientes CRM",
   invoices:  "Boletas y Facturas",
 };
 

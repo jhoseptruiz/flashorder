@@ -8,6 +8,7 @@ import indexRoutes from "./routes/index.routes.js";
 import sequelize from "./db/db.js"; 
 import "./models/index.models.js"; 
 import { createInitialUsers } from "./config/initialSetup.js";
+import { createInitialOrders } from "./config/intialSeptupOrder.js";
 
 async function setupServer() {
   try {
@@ -41,6 +42,7 @@ async function setupAPI() {
     console.log("=> Modelos sincronizados con la base de datos");
 
     await createInitialUsers();
+    await createInitialOrders();
     await setupServer();
   } catch (error) {
     console.log("Error crítico en setupAPI():", error);
