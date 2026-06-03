@@ -1,6 +1,5 @@
 "use strict";
 import { Op } from "sequelize";
-import sequelize from "../db/db.js";
 import User from "../models/User.js";
 import { hashPassword } from "../helpers/bcrypt.helper.js";
 
@@ -63,8 +62,8 @@ export async function updateUserService(rut, updates) {
   const updateData = {};
 
   for (const [key, value] of Object.entries(updates)) {
-    if (value === undefined || value === null) continue; 
-    if (key === "password") continue; 
+    if (value === undefined || value === null) continue;
+    if (key === "password") continue;
     if (key === "rut") {
       updateData["rut"] = value;
       continue;
@@ -75,7 +74,6 @@ export async function updateUserService(rut, updates) {
     }
     updateData[key === "full_name" ? "fullName" : key] = value;
   }
-
 
   const hasPassword = typeof updates.password === "string" && updates.password.length > 0;
 
@@ -88,16 +86,12 @@ export async function updateUserService(rut, updates) {
     throw new Error("Usuario no encontrado");
   }
 
-  
   if (updateData.rut && updateData.rut !== user.rut) {
-    
-    const [, rows] = await User.update(
+    await User.update(
       { rut: updateData.rut },
       { where: { rut: user.rut }, returning: true }
     );
-
     user = await User.findByPk(updateData.rut);
-
     delete updateData.rut;
   }
 
@@ -116,11 +110,11 @@ export async function updateUserService(rut, updates) {
 }
 
 export async function deleteUserService(rut) {
-  const deletedCount = await User.destroy({ where: { rut } });
-
-  if (deletedCount === 0) {
+  const user = await User.findOne({ where: { rut } });
+  if (!user) {
     throw new Error("Usuario no encontrado");
   }
 
+  await user.destroy();
   return { rut };
 }

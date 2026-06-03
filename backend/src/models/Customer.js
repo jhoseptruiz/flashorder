@@ -20,8 +20,6 @@ const Customer = sequelize.define("Customer", {
   }
 }, {
   tableName: "customers",
-  timestamps: true,
-  updatedAt: false, // Solo tiene created_at en tu SQL
 });
 
 export default Customer;

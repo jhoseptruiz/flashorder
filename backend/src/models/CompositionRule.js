@@ -10,14 +10,16 @@ const CompositionRule = sequelize.define("CompositionRule", {
     minItems: {
     type: DataTypes.INTEGER,
     allowNull: false,
-    },
-    minItems:{
-        type: DataTypes.INTEGER,
-        allowNull: false,
+    defaultValue: 0,
     },
     maxItems:{
         type: DataTypes.INTEGER,
         allowNull: true,
+    },
+    stepOrder: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+        defaultValue: 0,
     }
 
 },{

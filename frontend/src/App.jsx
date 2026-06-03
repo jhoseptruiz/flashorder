@@ -8,6 +8,7 @@ import Config from "./pages/Config";
 import Home from "./pages/Home";
 import Usuarios from "./pages/Usuarios";
 import Cocina from "./pages/Cocina";
+import Catalogo from "./pages/Catalogo";
 import "./styles/global.css";
 
 function AppContent() {
@@ -56,6 +57,7 @@ function AppContent() {
 
           <Route element={<ProtectedRoute allowedRoles={["admin"]} />}>
             <Route path="/usuarios" element={<Usuarios />} />
+            <Route path="/catalogo" element={<Catalogo/>}/>
             <Route path="/config" element={<Config />} />
           </Route>
         </Route>

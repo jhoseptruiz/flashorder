@@ -29,9 +29,8 @@ Category.hasMany(CompositionRule, { foreignKey: 'allowedCategoryId', as: 'Allowe
 CompositionRule.belongsTo(Category, { foreignKey: 'allowedCategoryId', as: 'AllowedCategory' });
 
 // Products "posee" ProductVariants
-Product.hasMany(ProductVariant, { foreignKey: 'productId' });
-ProductVariant.belongsTo(Product, { foreignKey: 'productId' });
-
+Product.hasMany(ProductVariant, { foreignKey: 'productId', as: 'variants' });
+ProductVariant.belongsTo(Product, { foreignKey: 'productId', as: 'product' });
 // ==========================================
 // OPERACIONES (PEDIDOS)
 // ==========================================

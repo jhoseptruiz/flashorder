@@ -7,7 +7,7 @@ export const NAV = [
   { icon: "ti-shopping-cart",    label: "Punto de Venta",      key: "pos",       roles: ["admin", "empleado"] },
   { icon: "ti-chef-hat",         label: "Cocina",              key: "kitchen",   roles: ["admin", "cocinero"] },
   { icon: "ti-calendar",         label: "Pedidos y Calendario", key: "orders",    roles: ["admin", "empleado", "cocinero"] },
-  //{ icon: "ti-users",            label: "Clientes CRM",        key: "clients",   roles: ["admin", "empleado"] },
+  { icon: "ti-category",         label: "Catálogo de Menú",    key: "catalogo",  roles: ["admin"] },
   { icon: "ti-receipt",          label: "Boletas y Facturas",  key: "invoices",  roles: ["admin", "empleado"] },
   { icon: "ti-users",            label: "Usuarios",            key: "usuarios",  roles: ["admin"] },
   { icon: "ti-settings",         label: "Configuración",       key: "config",    roles: ["admin"] },

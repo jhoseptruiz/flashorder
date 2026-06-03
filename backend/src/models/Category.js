@@ -15,6 +15,16 @@ const Category = sequelize.define("Category", {
     type: DataTypes.ENUM('base', 'complemento', 'independiente'),
     defaultValue: 'independiente',
     allowNull: false,
+  },
+  displayOrder: {
+    type: DataTypes.INTEGER,
+    defaultValue: 0,
+    allowNull: false,
+  },
+  isActive: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: true,
+    allowNull: false,
   }
 }, {
   tableName: "categories",
