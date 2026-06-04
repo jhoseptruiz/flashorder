@@ -1,34 +1,43 @@
+"use strict";
 import CustomerOrder from "../models/CustomerOrder.js";
 import OrderItem from "../models/OrderItem.js";
 import ProductVariant from "../models/ProductVariant.js";
 import Product from "../models/Product.js";
+import { Op } from "sequelize";
 import sequelize from "../db/db.js";
+
+// ── Include reutilizable con alias correctos ──────────────────────────────────
+// ProductVariant.belongsTo(Product, { as: 'product' })  → se necesita as:'product'
+
+const ORDER_INCLUDE = [
+  {
+    model: OrderItem,
+    attributes: ["id", "quantity", "unitPrice", "productNameSnapshot"],
+    include: [
+      {
+        model: ProductVariant,
+        attributes: ["variantName", "price"],
+        include: [
+          {
+            model: Product,
+            as: "product",           // ← alias definido en index.models.js
+            attributes: ["name"],
+          },
+        ],
+      },
+    ],
+  },
+];
+
+// ── Funciones existentes ──────────────────────────────────────────────────────
 
 export async function getOrdersByStatus(status) {
   try {
     const orders = await CustomerOrder.findAll({
       where: { status },
-      include: [
-        {
-          model: OrderItem,
-          attributes: ["id", "quantity", "unitPrice", "productNameSnapshot"],
-          include: [
-            {
-              model: ProductVariant,
-              attributes: ["variantName", "price"],
-              include: [
-                {
-                  model: Product,
-                  attributes: ["name"],
-                },
-              ],
-            },
-          ],
-        },
-      ],
+      include: ORDER_INCLUDE,
       order: [["orderDate", "DESC"]],
     });
-
     return orders;
   } catch (error) {
     console.error("Error en getOrdersByStatus:", error);
@@ -41,31 +50,13 @@ export async function getOrdersBetweenDates(startDate, endDate) {
     const orders = await CustomerOrder.findAll({
       where: {
         deliveryDate: {
-          [sequelize.Sequelize.Op.between]: [startDate, endDate],
+          [Op.between]: [startDate, endDate],
         },
         status: ["pendiente", "en_cocina"],
       },
-      include: [
-        {
-          model: OrderItem,
-          attributes: ["id", "quantity", "unitPrice", "productNameSnapshot"],
-          include: [
-            {
-              model: ProductVariant,
-              attributes: ["variantName", "price"],
-              include: [
-                {
-                  model: Product,
-                  attributes: ["name"],
-                },
-              ],
-            },
-          ],
-        },
-      ],
+      include: ORDER_INCLUDE,
       order: [["deliveryDate", "ASC"]],
     });
-
     return orders;
   } catch (error) {
     console.error("Error en getOrdersBetweenDates:", error);
@@ -81,7 +72,7 @@ export async function updateOrderStatus(orderId, newStatus) {
       throw new Error("Orden no encontrada");
     }
 
-    const validStatuses = ["pendiente", "en_cocina", "empacado", "entregado"];
+    const validStatuses = ["pendiente_uber", "pendiente", "en_cocina", "empacado", "entregado"];
     if (!validStatuses.includes(newStatus)) {
       throw new Error(`Estado inválido: ${newStatus}`);
     }
@@ -99,23 +90,7 @@ export async function updateOrderStatus(orderId, newStatus) {
 export async function getOrderById(orderId) {
   try {
     const order = await CustomerOrder.findByPk(orderId, {
-      include: [
-        {
-          model: OrderItem,
-          include: [
-            {
-              model: ProductVariant,
-              attributes: ["variantName", "price"],
-              include: [
-                {
-                  model: Product,
-                  attributes: ["name", "price"],
-                },
-              ],
-            },
-          ],
-        },
-      ],
+      include: ORDER_INCLUDE,
     });
 
     if (!order) {
@@ -125,6 +100,44 @@ export async function getOrderById(orderId) {
     return order;
   } catch (error) {
     console.error("Error en getOrderById:", error);
+    throw error;
+  }
+}
+
+// ── Funciones para la vista del Empleado ──────────────────────────────────────
+
+/** Todos los pedidos activos (excluye entregado) */
+export async function getOrdersForEmployee(startDate, endDate) {
+  try {
+    const where = {
+      status: { [Op.notIn]: ["entregado"] },
+    };
+    if (startDate && endDate) {
+      where.deliveryDate = { [Op.between]: [startDate, endDate] };
+    }
+    const orders = await CustomerOrder.findAll({
+      where,
+      include: ORDER_INCLUDE,
+      order: [["deliveryDate", "ASC"]],
+    });
+    return orders;
+  } catch (error) {
+    console.error("Error en getOrdersForEmployee:", error);
+    throw error;
+  }
+}
+
+/** Solo pedidos pendiente_uber (primer recuadro del empleado) */
+export async function getUberPendingOrders() {
+  try {
+    const orders = await CustomerOrder.findAll({
+      where: { status: "pendiente_uber" },
+      include: ORDER_INCLUDE,
+      order: [["orderDate", "ASC"]],
+    });
+    return orders;
+  } catch (error) {
+    console.error("Error en getUberPendingOrders:", error);
     throw error;
   }
 }

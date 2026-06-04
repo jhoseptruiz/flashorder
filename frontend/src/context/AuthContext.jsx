@@ -1,21 +1,52 @@
-import { createContext, useContext, useState, useEffect } from "react";
+import { createContext, useContext, useState, useEffect, useCallback } from "react";
 
 const AuthContext = createContext();
 
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
+
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null);
+  const [user, setUser]       = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // Puedes añadir lógica aquí para verificar un token persistente en localStorage
-  // al cargar la app por primera vez, si la API tiene un endpoint de validación (ej. /api/auth/me)
+  // ── Logout ────────────────────────────────────────────────────────────────
+  const logout = useCallback(async () => {
+    // Avisar al backend para que limpie la cookie httpOnly del refreshToken
+    try {
+      await fetch(`${API_URL}/api/auth/logout`, {
+        method:      "POST",
+        credentials: "include",
+      });
+    } catch {
+      // Si falla la petición, continuamos limpiando igualmente
+    }
+
+    setUser(null);
+    localStorage.removeItem("accessToken");
+    localStorage.removeItem("user");
+  }, []);
+
+  // ── Escuchar evento de sesión expirada (disparado por apiFetch) ───────────
   useEffect(() => {
-    const token = localStorage.getItem("accessToken");
+    const handleAuthLogout = () => {
+      setUser(null);
+      localStorage.removeItem("accessToken");
+      localStorage.removeItem("user");
+      // La redirección al login la maneja ProtectedRoute al detectar user=null
+    };
+
+    window.addEventListener("auth:logout", handleAuthLogout);
+    return () => window.removeEventListener("auth:logout", handleAuthLogout);
+  }, []);
+
+  // ── Inicialización: leer sesión persistida ────────────────────────────────
+  useEffect(() => {
+    const token      = localStorage.getItem("accessToken");
     const storedUser = localStorage.getItem("user");
 
     if (token && storedUser) {
       try {
         setUser(JSON.parse(storedUser));
-      } catch (e) {
+      } catch {
         localStorage.removeItem("user");
         localStorage.removeItem("accessToken");
       }
@@ -23,15 +54,10 @@ export function AuthProvider({ children }) {
     setLoading(false);
   }, []);
 
-  const login = (userData) => {
+  // ── Login ─────────────────────────────────────────────────────────────────
+  const login = useCallback((userData) => {
     setUser(userData);
-  };
-
-  const logout = () => {
-    setUser(null);
-    localStorage.removeItem("accessToken");
-    localStorage.removeItem("user");
-  };
+  }, []);
 
   return (
     <AuthContext.Provider value={{ user, login, logout, loading }}>

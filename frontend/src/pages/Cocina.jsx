@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useTheme } from "../context/ThemeContext";
 import { useAuth } from "../context/AuthContext";
+import { apiFetch } from "../utils/apiFetch";
 
 const getStatusColor = (status) => {
   const colors = {
@@ -35,7 +36,6 @@ export default function Cocina() {
   const [selectedDate, setSelectedDate] = useState(new Date());
 
   const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
-  const token = localStorage.getItem("accessToken");
 
   // Obtener órdenes de los últimos 7 días a futuro
   const fetchOrders = async () => {
@@ -46,11 +46,8 @@ export default function Cocina() {
       const endDate = new Date();
       endDate.setDate(endDate.getDate() + 7);
 
-      const response = await fetch(
-        `${API_URL}/api/orders/kitchen/calendar?startDate=${startDate.toISOString()}&endDate=${endDate.toISOString()}`,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        }
+      const response = await apiFetch(
+        `/api/orders/kitchen/calendar?startDate=${startDate.toISOString()}&endDate=${endDate.toISOString()}`
       );
 
       if (!response.ok) throw new Error("No se pudieron obtener las órdenes");
@@ -73,12 +70,8 @@ export default function Cocina() {
 
   const handleStatusChange = async (orderId, newStatus) => {
     try {
-      const response = await fetch(`${API_URL}/api/orders/${orderId}/status`, {
+      const response = await apiFetch(`/api/orders/${orderId}/status`, {
         method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
         body: JSON.stringify({ status: newStatus }),
       });
 
@@ -264,7 +257,7 @@ export default function Cocina() {
   );
 
   return (
-    <div className="page-container" style={{ maxWidth: 1200, margin: "0 auto", animation: "fadein 0.3s ease", padding: "0 16px" }}>
+    <div className="page-container" style={{ maxWidth: 1200, margin: "0 auto", animation: "fadein 0.3s ease", padding: "0 16px", height: "calc(100vh - 64px)", display: "flex", flexDirection: "column" }}>
       {/* Header */}
       <div className="page-header" style={{ marginBottom: 24 }}>
         <div>
@@ -281,9 +274,9 @@ export default function Cocina() {
           <p style={{ marginTop: 12 }}>Cargando órdenes...</p>
         </div>
       ) : (
-        <div className="kitchen-layout" style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr)", gap: 20 }}>
+        <div className="kitchen-layout" style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr)", gap: 20, flex: 1, minHeight: 0 }}>
           {/* Calendario Sidebar */}
-          <aside className="card kitchen-calendar" style={{ padding: 16, height: "fit-content" }}>
+          <aside className="card kitchen-calendar" style={{ padding: 16, height: "100%", overflowY: "auto", display: "flex", flexDirection: "column" }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
               <button
                 type="button"
@@ -364,7 +357,7 @@ export default function Cocina() {
           </aside>
 
           {/* Contenedor principal */}
-          <div className="kitchen-main">
+          <div className="kitchen-main" style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
             <div style={{ marginBottom: 8 }}>
               <h2 style={{ fontSize: 14, fontWeight: 700, color: "var(--text)", margin: 0 }}>
                 {selectedDate.toLocaleDateString("es-CL", { weekday: "long", month: "long", day: "numeric" })}
@@ -372,9 +365,9 @@ export default function Cocina() {
             </div>
 
             {/* Grid de Pendientes y En Cocina */}
-            <div className="kitchen-orders" style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr)", gap: 20 }}>
+            <div className="kitchen-orders" style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr)", gap: 20, flex: 1, minHeight: 0 }}>
               {/* Sección Pendientes */}
-              <section className="card" style={{ padding: 16 }}>
+              <section className="card" style={{ padding: 16, display: "flex", flexDirection: "column", height: "100%", overflowY: "auto" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
                   <div
                     style={{
@@ -421,7 +414,7 @@ export default function Cocina() {
               </section>
 
               {/* Sección En Cocina */}
-              <section className="card" style={{ padding: 16 }}>
+              <section className="card" style={{ padding: 16, display: "flex", flexDirection: "column", height: "100%", overflowY: "auto" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
                   <div
                     style={{
@@ -479,7 +472,7 @@ export default function Cocina() {
 
           .kitchen-calendar {
             position: static;
-            height: fit-content;
+            height: 100%;
           }
 
           .kitchen-orders {

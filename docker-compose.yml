@@ -7,10 +7,10 @@ services:
     env_file: ./backend/.env
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: ubb
+      POSTGRES_PASSWORD: FlashOrder2025!
       POSTGRES_DB: flashorder_db
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./backend/src/db/schema.sql:/docker-entrypoint-initdb.d/schema.sql
@@ -19,6 +19,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - flashorder_net
 
   backend:
     build: ./backend
@@ -31,9 +33,12 @@ services:
     environment:
       DB_HOST: postgres
       DB_PORT: 5432
+      DB_PASSWORD: FlashOrder2025!
       NODE_ENV: production
     ports:
       - "3000:3000"
+    networks:
+      - flashorder_net
 
   frontend:
     build: ./frontend
@@ -44,6 +49,12 @@ services:
     env_file: ./frontend/.env
     ports:
       - "5173:5173"
+    networks:
+      - flashorder_net
 
 volumes:
   postgres_data:
+
+networks:
+  flashorder_net:
+    driver: bridge

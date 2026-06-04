@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useTheme } from "../context/ThemeContext";
+import { apiFetch } from "../utils/apiFetch";
 
 const ROLES = {
   empleado: { label: "Empleado", color: "#f9c7d1" },
@@ -67,16 +68,11 @@ export default function Usuarios() {
   const [showPassword, setShowPassword] = useState(false);
 
   const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
-  const token = localStorage.getItem("accessToken");
 
   const fetchUsers = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`${API_URL}/api/users`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      const response = await apiFetch(`/api/users`);
 
       const data = await response.json();
       if (!response.ok) {
@@ -160,11 +156,7 @@ export default function Usuarios() {
 
     try {
       const url = `${API_URL}/api/users/check-rut?rut=${encodeURIComponent(cleanRut)}${editingRut ? `&excludeRut=${encodeURIComponent(editingRut)}` : ""}`;
-      const response = await fetch(url, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      const response = await apiFetch(url);
 
       const data = await response.json();
       if (!response.ok) {
@@ -199,11 +191,7 @@ export default function Usuarios() {
 
     try {
       const url = `${API_URL}/api/users/check-email?email=${encodeURIComponent(emailValue)}${editingRut ? `&excludeRut=${encodeURIComponent(editingRut)}` : ""}`;
-      const response = await fetch(url, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      const response = await apiFetch(url);
 
       const data = await response.json();
       if (!response.ok) {
@@ -273,12 +261,8 @@ export default function Usuarios() {
         }
         if (pwd) payload.password = pwd;
 
-        const response = await fetch(`${API_URL}/api/users/${editingRut}`, {
+        const response = await apiFetch(`/api/users/${editingRut}`, {
           method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
           body: JSON.stringify(payload),
         });
 
@@ -296,12 +280,8 @@ export default function Usuarios() {
           throw new Error("La contraseña debe tener al menos 8 caracteres");
         }
 
-        const response = await fetch(`${API_URL}/api/users`, {
+        const response = await apiFetch(`/api/users`, {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
           body: JSON.stringify({
             rut: normalizedRut,
             full_name: form.full_name,
@@ -348,11 +328,8 @@ export default function Usuarios() {
 
     try {
       const normalizedRut = normalizeRut(rut);
-      const response = await fetch(`${API_URL}/api/users/${normalizedRut}`, {
+      const response = await apiFetch(`/api/users/${normalizedRut}`, {
         method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
       });
 
       const data = await response.json();

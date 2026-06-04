@@ -3,6 +3,8 @@ import {
   getOrdersBetweenDates,
   updateOrderStatus,
   getOrderById,
+  getOrdersForEmployee,
+  getUberPendingOrders,
 } from "../services/orders.service.js";
 
 export async function getOrdersByStatusController(req, res) {
@@ -76,14 +78,36 @@ export async function updateOrderStatusController(req, res) {
 export async function getOrderByIdController(req, res) {
   try {
     const { orderId } = req.params;
-
     const order = await getOrderById(orderId);
-
     res.json(order);
   } catch (error) {
     console.error("Error en getOrderByIdController:", error);
     res.status(500).json({
       error: error.message || "No se pudo obtener la orden",
     });
+  }
+}
+
+export async function getOrdersForEmployeeController(req, res) {
+  try {
+    const { startDate, endDate } = req.query;
+    const orders = await getOrdersForEmployee(
+      startDate ? new Date(startDate) : null,
+      endDate   ? new Date(endDate)   : null
+    );
+    res.json(orders);
+  } catch (error) {
+    console.error("Error en getOrdersForEmployeeController:", error);
+    res.status(500).json({ error: "No se pudieron obtener las órdenes" });
+  }
+}
+
+export async function getUberPendingOrdersController(req, res) {
+  try {
+    const orders = await getUberPendingOrders();
+    res.json(orders);
+  } catch (error) {
+    console.error("Error en getUberPendingOrdersController:", error);
+    res.status(500).json({ error: "No se pudieron obtener los pedidos Uber" });
   }
 }

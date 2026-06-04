@@ -22,10 +22,10 @@ ordersRouter.get(
   ordersController.getOrdersForKitchenController
 );
 
-// Actualizar estado de una orden
+// Actualizar estado de una orden (empleado puede marcar como entregado)
 ordersRouter.put(
   "/:orderId/status",
-  authorizeRoles("admin", "cocinero"),
+  authorizeRoles("admin", "cocinero", "empleado"),
   ordersController.updateOrderStatusController
 );
 
@@ -34,6 +34,22 @@ ordersRouter.get(
   "/:orderId",
   authorizeRoles("admin", "cocinero", "empleado"),
   ordersController.getOrderByIdController
+);
+
+// ── Rutas para el Empleado ────────────────────────────────────────────────────
+
+// Todos los pedidos activos (excluye entregado) con filtro opcional de fechas
+ordersRouter.get(
+  "/employee/active",
+  authorizeRoles("admin", "empleado"),
+  ordersController.getOrdersForEmployeeController
+);
+
+// Pedidos pendiente_uber (primer recuadro del empleado)
+ordersRouter.get(
+  "/employee/uber-pending",
+  authorizeRoles("admin", "empleado"),
+  ordersController.getUberPendingOrdersController
 );
 
 export default ordersRouter;
