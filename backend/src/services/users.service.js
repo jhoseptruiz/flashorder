@@ -1,7 +1,7 @@
 "use strict";
 import { Op } from "sequelize";
 import User from "../models/User.js";
-import { hashPassword } from "../helpers/bcrypt.helper.js";
+import { hashPassword, comparePassword } from "../helpers/bcrypt.helper.js";
 
 const ALLOWED_ROLES = ["empleado", "cocinero"];
 
@@ -24,6 +24,65 @@ export async function getAllUsersService() {
   });
 
   return users.map(formatUserRecord);
+}
+
+export async function getUserByRutService(rut) {
+  const user = await User.findByPk(rut, {
+    attributes: ["rut", "fullName", "email", "role", "isActive", "passwordHash"],
+    raw: true,
+  });
+
+  if (!user) return null;
+  return formatUserRecord(user);
+}
+
+export async function updateOwnProfileService(currentRut, updates, currentPassword, isAdmin = false) {
+  const safeUpdate = {};
+
+  for (const [key, value] of Object.entries(updates)) {
+    if (value === undefined || value === null) continue;
+    if (key === "password") continue;
+    if (key === "rut") {
+      safeUpdate.rut = value;
+      continue;
+    }
+    if (key === "full_name" || key === "email") {
+      safeUpdate[key] = value;
+      continue;
+    }
+  }
+
+  const newPassword = typeof updates.password === "string" && updates.password.trim().length > 0 ? updates.password : undefined;
+  const hasProfileFields = Object.keys(safeUpdate).length > 0;
+
+  if (!isAdmin && hasProfileFields) {
+    throw new Error("Solo se puede cambiar la contraseña desde este perfil");
+  }
+
+  if (!hasProfileFields && !newPassword) {
+    throw new Error("No hay cambios válidos para actualizar");
+  }
+
+  if (newPassword) {
+    if (!currentPassword) {
+      throw new Error("Contraseña actual requerida para cambiar la contraseña");
+    }
+
+    const user = await User.findByPk(currentRut);
+    if (!user) {
+      throw new Error("Usuario no encontrado");
+    }
+
+    const validPassword = await comparePassword(currentPassword, user.passwordHash);
+    if (!validPassword) {
+      throw new Error("Contraseña actual incorrecta");
+    }
+  }
+
+  return await updateUserService(currentRut, {
+    ...safeUpdate,
+    password: newPassword,
+  });
 }
 
 export async function createUserService({ rut, full_name, email, password, role }) {
