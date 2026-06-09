@@ -10,6 +10,7 @@ import Usuarios from "./pages/Usuarios";
 import Cocina from "./pages/Cocina";
 import Catalogo from "./pages/Catalogo";
 import Pedidos from "./pages/Pedidos";
+import Perfil from "./pages/Perfil";
 import "./styles/global.css";
 
 function AppContent() {
@@ -53,6 +54,7 @@ function AppContent() {
           </Route>
 
           <Route element={<ProtectedRoute allowedRoles={["admin", "empleado", "cocinero"]} />}>
+            <Route path="/perfil" element={<Perfil />} />
             <Route path="/orders" element={<Pedidos />} />
           </Route>
 

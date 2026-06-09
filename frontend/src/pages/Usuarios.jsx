@@ -664,14 +664,14 @@ function UsuarioCard({ user, onEdit, onDelete, highlight }) {
         <button
           type="button"
           onClick={() => onEdit(user)}
-          style={{ border: "1px solid var(--border)", background: "#fff", borderRadius: 8, padding: "8px 10px", fontSize: 12, cursor: "pointer", color: "var(--text)" }}
+          style={{ border: "1px solid var(--border)", background: "#0dad1a", borderRadius: 8, padding: "8px 10px", fontSize: 12, cursor: "pointer", color: "var(--text)" }}
         >
           <i className="ti ti-edit" style={{ marginRight: 4 }} />Editar
         </button>
         <button
           type="button"
           onClick={() => onDelete(user.rut)}
-          style={{ border: "1px solid #f9c7d1", background: "#fff", borderRadius: 8, padding: "8px 10px", fontSize: 12, cursor: "pointer", color: "#d7263d" }}
+          style={{ border: "1px solid var(--border)", background: "#ff3a3a", borderRadius: 8, padding: "8px 10px", fontSize: 12, cursor: "pointer", color: "var(--text)" }}
         >
           <i className="ti ti-trash" style={{ marginRight: 4 }} />Eliminar
         </button>
