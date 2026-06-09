@@ -7,7 +7,9 @@ import Layout from "./components/Layout";
 import Config from "./pages/Config";
 import Home from "./pages/Home";
 import Usuarios from "./pages/Usuarios";
+import Cocina from "./pages/Cocina";
 import Catalogo from "./pages/Catalogo";
+import Pedidos from "./pages/Pedidos";
 import "./styles/global.css";
 
 function AppContent() {
@@ -47,11 +49,11 @@ function AppContent() {
           </Route>
 
           <Route element={<ProtectedRoute allowedRoles={["admin", "cocinero"]} />}>
-            <Route path="/kitchen" element={<Home navKey="kitchen" />} />
+            <Route path="/kitchen" element={<Cocina />} />
           </Route>
 
           <Route element={<ProtectedRoute allowedRoles={["admin", "empleado", "cocinero"]} />}>
-            <Route path="/orders" element={<Home navKey="orders" />} />
+            <Route path="/orders" element={<Pedidos />} />
           </Route>
 
           <Route element={<ProtectedRoute allowedRoles={["admin"]} />}>

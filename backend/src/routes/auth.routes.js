@@ -44,8 +44,8 @@ router.post("/login", async (req, res) => {
     try {
       res.cookie("refreshToken", result.refreshToken, {
         httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "strict",
+        secure: process.env.NODE_ENV === "production" && !req.headers.origin?.includes("localhost"),
+        sameSite: "lax",
         maxAge: REFRESH_COOKIE_MAX_AGE,
       });
     } catch (cookieError) {
@@ -80,8 +80,8 @@ router.post("/refresh", async (req, res) => {
 
     res.cookie("refreshToken", result.refreshToken, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "strict",
+      secure: process.env.NODE_ENV === "production" && !req.headers.origin?.includes("localhost"),
+      sameSite: "lax",
       maxAge: REFRESH_COOKIE_MAX_AGE,
     });
 

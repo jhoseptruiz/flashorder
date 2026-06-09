@@ -9,6 +9,7 @@ export default function Login() {
   const navigate = useNavigate();
   const [email,    setEmail]   = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error,    setError]   = useState("");
   const [loading,  setLoading] = useState(false);
 
@@ -115,13 +116,39 @@ export default function Login() {
               <label style={{ fontSize: 13, fontWeight: 500, color: "var(--text2)", display: "block", marginBottom: 6 }}>
                 Contraseña
               </label>
-              <input
-                className="input-field"
-                type="password"
-                placeholder="••••••••"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
+              <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
+                <input
+                  className="input-field"
+                  type={showPassword ? "text" : "password"}
+                  placeholder="••••••••"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  style={{ paddingRight: 40, width: "100%" }}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((prev) => !prev)}
+                  aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+                  style={{
+                    position: "absolute",
+                    right: 10,
+                    top: "50%",
+                    transform: "translateY(-50%)",
+                    width: 30,
+                    height: 30,
+                    borderRadius: 8,
+                    border: "none",
+                    background: "transparent",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    cursor: "pointer",
+                    color: "var(--text2)",
+                  }}
+                >
+                  <i className={`ti ${showPassword ? "ti-eye-off" : "ti-eye"}`} />
+                </button>
+              </div>
             </div>
 
             {error && (

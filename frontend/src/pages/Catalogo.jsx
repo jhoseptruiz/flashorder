@@ -1,15 +1,9 @@
 import { useState, useEffect, useMemo } from "react";
 import { useTheme } from "../context/ThemeContext";
 import Swal from "sweetalert2";
+import { apiFetch } from "../utils/apiFetch";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
-
-function authHeaders() {
-  return {
-    "Content-Type": "application/json",
-    Authorization: `Bearer ${localStorage.getItem("accessToken")}`,
-  };
-}
 
 const BEHAVIOR_MAP = {
   independiente: { label: "Independiente", color: "#6366f1", bg: "#eef2ff" },
@@ -42,8 +36,8 @@ export default function Catalogo() {
   const fetchData = async () => {
     try {
       const [catRes, prodRes] = await Promise.all([
-        fetch(`${API_URL}/api/catalog/categories`, { headers: authHeaders() }),
-        fetch(`${API_URL}/api/catalog/products`, { headers: authHeaders() }),
+        apiFetch(`/api/catalog/categories`),
+        apiFetch(`/api/catalog/products`),
       ]);
       const catData = catRes.ok ? await catRes.json() : [];
       const prodData = prodRes.ok ? await prodRes.json() : [];
@@ -86,9 +80,8 @@ export default function Catalogo() {
       const url = isEdit
         ? `${API_URL}/api/catalog/categories/${formData.id}`
         : `${API_URL}/api/catalog/categories`;
-      const res = await fetch(url, {
+      const res = await apiFetch(url, {
         method: isEdit ? "PUT" : "POST",
-        headers: authHeaders(),
         body: JSON.stringify(formData),
       });
       const data = await res.json();
@@ -113,9 +106,8 @@ export default function Catalogo() {
     });
     if (!result.isConfirmed) return;
     try {
-      const res = await fetch(`${API_URL}/api/catalog/categories/${cat.id}`, {
+      const res = await apiFetch(`/api/catalog/categories/${cat.id}`, {
         method: "DELETE",
-        headers: authHeaders(),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Error al eliminar");
@@ -162,9 +154,8 @@ export default function Catalogo() {
       const url = isEdit
         ? `${API_URL}/api/catalog/products/${formData.id}`
         : `${API_URL}/api/catalog/products`;
-      const res = await fetch(url, {
+      const res = await apiFetch(url, {
         method: isEdit ? "PUT" : "POST",
-        headers: authHeaders(),
         body: JSON.stringify(formData),
       });
       const data = await res.json();
@@ -189,9 +180,8 @@ export default function Catalogo() {
     });
     if (!result.isConfirmed) return;
     try {
-      const res = await fetch(`${API_URL}/api/catalog/products/${prod.id}`, {
+      const res = await apiFetch(`/api/catalog/products/${prod.id}`, {
         method: "DELETE",
-        headers: authHeaders(),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Error al eliminar");

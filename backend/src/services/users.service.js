@@ -1,17 +1,29 @@
 "use strict";
+import { Op } from "sequelize";
 import User from "../models/User.js";
 import { hashPassword } from "../helpers/bcrypt.helper.js";
 
 const ALLOWED_ROLES = ["empleado", "cocinero"];
 
+function formatUserRecord(user) {
+  return {
+    rut: user.rut,
+    full_name: user.fullName ?? user.full_name,
+    email: user.email,
+    role: user.role,
+    is_active: user.isActive ?? user.is_active,
+  };
+}
+
 export async function getAllUsersService() {
   const users = await User.findAll({
     where: { isActive: true },
-    attributes: ["rut", "fullName", "email", "role", "isActive"],
     order: [["fullName", "ASC"]],
+    attributes: ["rut", "fullName", "email", "role", "isActive"],
+    raw: true,
   });
 
-  return users;
+  return users.map(formatUserRecord);
 }
 
 export async function createUserService({ rut, full_name, email, password, role }) {
@@ -19,20 +31,21 @@ export async function createUserService({ rut, full_name, email, password, role 
     throw new Error("El rol debe ser empleado o cocinero");
   }
 
-  // Verificar si ya existe un usuario con ese RUT o email
-  const existingByRut = await User.findOne({ where: { rut } });
-  if (existingByRut) {
-    throw new Error("Ya existe un usuario con ese RUT");
-  }
+  const existing = await User.findOne({
+    where: {
+      [Op.or]: [{ rut }, { email }],
+    },
+  });
 
-  const existingByEmail = await User.findOne({ where: { email } });
-  if (existingByEmail) {
+  if (existing) {
+    if (existing.rut === rut) {
+      throw new Error("Ya existe un usuario con ese RUT");
+    }
     throw new Error("Ya existe un usuario con ese correo");
   }
 
   const passwordHash = await hashPassword(password);
-
-  const newUser = await User.create({
+  const user = await User.create({
     rut,
     fullName: full_name,
     email,
@@ -41,33 +54,59 @@ export async function createUserService({ rut, full_name, email, password, role 
     isActive: true,
   });
 
-  // Devolver sin el hash
-  const userData = newUser.toJSON();
-  delete userData.passwordHash;
-  return userData;
+  return formatUserRecord(user.get({ plain: true }));
 }
 
 export async function updateUserService(rut, updates) {
-  const user = await User.findOne({ where: { rut } });
+  const allowedFields = ["full_name", "email", "role"];
+  const updateData = {};
+
+  for (const [key, value] of Object.entries(updates)) {
+    if (value === undefined || value === null) continue;
+    if (key === "password") continue;
+    if (key === "rut") {
+      updateData["rut"] = value;
+      continue;
+    }
+    if (!allowedFields.includes(key)) continue;
+    if (key === "role" && !ALLOWED_ROLES.includes(value)) {
+      throw new Error("El rol debe ser empleado o cocinero");
+    }
+    updateData[key === "full_name" ? "fullName" : key] = value;
+  }
+
+  const hasPassword = typeof updates.password === "string" && updates.password.length > 0;
+
+  if (Object.keys(updateData).length === 0 && !hasPassword) {
+    throw new Error("No hay campos válidos para actualizar");
+  }
+
+  let user = await User.findByPk(rut);
   if (!user) {
     throw new Error("Usuario no encontrado");
   }
 
-  // Solo actualizar campos permitidos
-  if (updates.full_name) user.fullName = updates.full_name;
-  if (updates.email) user.email = updates.email;
-  if (updates.role) {
-    if (!ALLOWED_ROLES.includes(updates.role)) {
-      throw new Error("El rol debe ser empleado o cocinero");
-    }
-    user.role = updates.role;
+  if (updateData.rut && updateData.rut !== user.rut) {
+    await User.update(
+      { rut: updateData.rut },
+      { where: { rut: user.rut }, returning: true }
+    );
+    user = await User.findByPk(updateData.rut);
+    delete updateData.rut;
   }
 
-  await user.save();
+  if (Object.keys(updateData).length > 0) {
+    await user.update(updateData);
+    await user.reload();
+  }
 
-  const userData = user.toJSON();
-  delete userData.passwordHash;
-  return userData;
+  if (hasPassword) {
+    const passwordHash = await hashPassword(updates.password);
+    await user.update({ passwordHash });
+    await user.reload();
+  }
+
+  return formatUserRecord(user.get({ plain: true }));
 }
 
 export async function deleteUserService(rut) {
