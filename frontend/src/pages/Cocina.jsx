@@ -37,14 +37,24 @@ export default function Cocina() {
 
   const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
 
-  // Obtener órdenes de los últimos 7 días a futuro
-  const fetchOrders = async () => {
+  // Obtener órdenes del mes actual y el siguiente
+ const fetchOrders = async () => {
     try {
       setLoading(true);
-      const startDate = new Date();
-      startDate.setDate(startDate.getDate() - 1);
-      const endDate = new Date();
-      endDate.setDate(endDate.getDate() + 7);
+      const startDate = new Date(
+        currentDate.getFullYear(),
+        currentDate.getMonth(),
+        1
+      );
+      const endDate = new Date(
+        currentDate.getFullYear(),
+        currentDate.getMonth() + 2,
+        0,
+        23,
+        59,
+        59,
+        999
+      );
 
       const response = await apiFetch(
         `/api/orders/kitchen/calendar?startDate=${startDate.toISOString()}&endDate=${endDate.toISOString()}`
@@ -65,8 +75,7 @@ export default function Cocina() {
     if (user?.role === "admin" || user?.role === "cocinero") {
       fetchOrders();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [user, currentDate]);
 
   const handleStatusChange = async (orderId, newStatus) => {
     try {
@@ -331,7 +340,7 @@ export default function Cocina() {
                       padding: "8px 4px",
                       borderRadius: 6,
                       border: isSelected ? `2px solid ${primary}` : "1px solid var(--border)",
-                      background: isSelected ? `${primary}20` : isToday ? "#f5f5f5" : "transparent",
+                      background: isSelected ? `${primary}20` : isToday ? `${primary}10` : "transparent",
                       color: "var(--text)",
                       fontSize: 11,
                       fontWeight: isToday ? 700 : 500,

@@ -120,6 +120,22 @@ export async function createInitialOrders() {
         ],
       },
       {
+        orderDate: new Date("2026-07-02T09:00:00"),
+        deliveryDate: new Date("2026-07-03T13:30:00"),
+        totalAmount: 16800,
+        source: "local",
+        status: "pendiente",
+        notes: null,
+        items: [
+          {
+            productNameSnapshot: "X3 Docena Empanadas",
+            quantity: 3,
+            unitPrice: 5600,
+            subtotal: 16800,
+          },
+        ],
+      },
+      {
         orderDate: new Date("2026-06-02T09:45:00"),
         deliveryDate: new Date("2026-06-02T14:00:00"),
         totalAmount: 38000,
