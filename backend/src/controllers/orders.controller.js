@@ -6,6 +6,7 @@ import {
   getOrdersForEmployee,
   getUberPendingOrders,
 } from "../services/orders.service.js";
+import { createAuditLog } from "../helpers/audit.helper.js";
 
 export async function getOrdersByStatusController(req, res) {
   try {
@@ -58,7 +59,25 @@ export async function updateOrderStatusController(req, res) {
       return res.status(400).json({ error: "El estado es requerido" });
     }
 
+    // Obtener estado anterior antes de actualizar
+    const previousOrder = await getOrderById(orderId);
+    const oldStatus = previousOrder.status;
+
     const order = await updateOrderStatus(orderId, status);
+
+    // Registrar auditoría del cambio de estado
+    await createAuditLog(
+      req.user.rut,
+      "UPDATE_STATUS",
+      "customer_orders",
+      orderId,
+      { status: oldStatus },
+      {
+        status: order.status,
+        externalOrderId: previousOrder.externalOrderId || null,
+        source: previousOrder.source || null,
+      }
+    );
 
     res.json({
       message: "Orden actualizada correctamente",

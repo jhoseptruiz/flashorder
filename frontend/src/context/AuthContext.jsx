@@ -10,11 +10,13 @@ export function AuthProvider({ children }) {
 
   // ── Logout ────────────────────────────────────────────────────────────────
   const logout = useCallback(async () => {
-    // Avisar al backend para que limpie la cookie httpOnly del refreshToken
+    // Avisar al backend para que registre la auditoría y limpie la cookie
     try {
+      const token = localStorage.getItem("accessToken");
       await fetch(`${API_URL}/api/auth/logout`, {
         method:      "POST",
         credentials: "include",
+        headers: token ? { "Authorization": `Bearer ${token}` } : {},
       });
     } catch {
       // Si falla la petición, continuamos limpiando igualmente

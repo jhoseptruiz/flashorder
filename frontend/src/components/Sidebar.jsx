@@ -11,6 +11,7 @@ export const NAV = [
   { icon: "ti-receipt",          label: "Boletas y Facturas",  key: "invoices",  roles: ["admin", "empleado"] },
   { icon: "ti-users",            label: "Usuarios",            key: "usuarios",  roles: ["admin"] },
   { icon: "ti-user",             label: "Perfil",              key: "perfil",     roles: ["admin", "empleado", "cocinero"] },
+  { icon: "ti-clipboard-list",   label: "Auditoría",           key: "auditoria",  roles: ["admin", "empleado", "cocinero"] },
   { icon: "ti-settings",         label: "Configuración",       key: "config",    roles: ["admin"] },
 ];
 

@@ -2,6 +2,8 @@
 import { Router } from "express";
 import { loginService, refreshTokenService } from "../services/auth.service.js";
 import { jwtDurationToMs } from "../helpers/jwt.helper.js";
+import { createAuditLog } from "../helpers/audit.helper.js";
+import { authenticate } from "../middlewares/authentication.middleware.js";
 
 const router = Router();
 
@@ -17,7 +19,7 @@ try {
   REFRESH_COOKIE_MAX_AGE = 3 * 24 * 60 * 60 * 1000; // fallback a 3 días
 }
 
-// POST /api/auth/login
+// POST 
 router.post("/login", async (req, res) => {
   try {
     console.log("=> POST /auth/login recibido");
@@ -40,6 +42,17 @@ router.post("/login", async (req, res) => {
     }
 
     console.log("   Login exitoso para:", email);
+
+    // Registrar auditoría de inicio de sesión
+    await createAuditLog(
+      result.user.rut,
+      "LOGIN",
+      "users",
+      result.user.rut,
+      null,
+      { email, fullName: result.user.full_name }
+    );
+
     // Guardar refresh token en cookie segura
     try {
       res.cookie("refreshToken", result.refreshToken, {
@@ -63,7 +76,7 @@ router.post("/login", async (req, res) => {
   }
 });
 
-// POST /api/auth/refresh
+// POST 
 router.post("/refresh", async (req, res) => {
   try {
     const refreshToken = req.cookies.refreshToken;
@@ -95,10 +108,25 @@ router.post("/refresh", async (req, res) => {
   }
 });
 
-// POST /api/auth/logout
-router.post("/logout", (req, res) => {
+// POST 
+router.post("/logout", authenticate, async (req, res) => {
+  try {
+    // Registrar auditoría de cierre de sesión
+    await createAuditLog(
+      req.user.rut,
+      "LOGOUT",
+      "users",
+      req.user.rut,
+      null,
+      null
+    );
+  } catch {
+    // Si falla la auditoría, continuamos con el logout
+  }
+
   res.clearCookie("refreshToken");
   return res.status(200).json({ message: "Logout exitoso" });
 });
 
 export default router;
+
