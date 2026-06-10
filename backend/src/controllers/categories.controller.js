@@ -1,4 +1,5 @@
 import { Category, Product } from "../models/index.models.js";
+import { createAuditLog } from "../helpers/audit.helper.js";
 
 // GET /api/catalog/categories
 export const getCategories = async (req, res) => {
@@ -40,6 +41,16 @@ export const createCategory = async (req, res) => {
       displayOrder: displayOrder ?? 0,
     });
 
+    // Registrar auditoría
+    await createAuditLog(
+      req.user.rut,
+      "CREATE",
+      "categories",
+      newCategory.id,
+      null,
+      { name: name.trim(), behavior: behavior || "independiente" }
+    );
+
     res.status(201).json(newCategory);
   } catch (error) {
     if (error.name === "SequelizeUniqueConstraintError") {
@@ -60,12 +71,25 @@ export const updateCategory = async (req, res) => {
       return res.status(404).json({ error: "Categoría no encontrada" });
     }
 
+    const oldData = { name: category.name, behavior: category.behavior, displayOrder: category.displayOrder, isActive: category.isActive };
+
     if (name !== undefined) category.name = name.trim();
     if (behavior !== undefined) category.behavior = behavior;
     if (displayOrder !== undefined) category.displayOrder = displayOrder;
     if (isActive !== undefined) category.isActive = isActive;
 
     await category.save();
+
+    // Registrar auditoría
+    await createAuditLog(
+      req.user.rut,
+      "UPDATE",
+      "categories",
+      id,
+      oldData,
+      { name: category.name, behavior: category.behavior, displayOrder: category.displayOrder, isActive: category.isActive }
+    );
+
     res.json(category);
   } catch (error) {
     if (error.name === "SequelizeUniqueConstraintError") {
@@ -94,6 +118,17 @@ export const deleteCategory = async (req, res) => {
     }
 
     await category.destroy();
+
+    // Registrar auditoría
+    await createAuditLog(
+      req.user.rut,
+      "DELETE",
+      "categories",
+      id,
+      { name: category.name },
+      null
+    );
+
     res.json({ message: "Categoría eliminada correctamente" });
   } catch (error) {
     res.status(500).json({ error: "Error al eliminar categoría", details: error.message });

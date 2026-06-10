@@ -1,8 +1,9 @@
 import { Op } from "sequelize";
 import { Product, ProductVariant, Category } from "../models/index.models.js";
 import sequelize from "../db/db.js";
+import { createAuditLog } from "../helpers/audit.helper.js";
 
-// GET /api/catalog/products?categoryId=uuid&search=texto
+// GET 
 export const getProducts = async (req, res) => {
   try {
     const { categoryId, search } = req.query;
@@ -31,7 +32,7 @@ export const getProducts = async (req, res) => {
   }
 };
 
-// POST /api/catalog/products
+// POST 
 export const createProduct = async (req, res) => {
   const transaction = await sequelize.transaction();
   try {
@@ -95,13 +96,23 @@ export const createProduct = async (req, res) => {
     });
 
     res.status(201).json(fullProduct);
+
+    // Registrar auditoría (después de responder para no retrasar)
+    await createAuditLog(
+      req.user.rut,
+      "CREATE",
+      "products",
+      fullProduct.id,
+      null,
+      { name: name.trim(), categoryId, isComposite: isComposite || false, variantsCount: variants.length }
+    );
   } catch (error) {
     await transaction.rollback();
     res.status(500).json({ error: "Error al crear producto", details: error.message });
   }
 };
 
-// PUT /api/catalog/products/:id
+// PUT 
 export const updateProduct = async (req, res) => {
   const transaction = await sequelize.transaction();
   try {
@@ -175,6 +186,16 @@ export const updateProduct = async (req, res) => {
     });
 
     res.json(fullProduct);
+
+    // Registrar auditoría
+    await createAuditLog(
+      req.user.rut,
+      "UPDATE",
+      "products",
+      id,
+      null,
+      { name: fullProduct.name, categoryId: fullProduct.categoryId, isActive: fullProduct.isActive }
+    );
   } catch (error) {
     await transaction.rollback();
     res.status(500).json({ error: "Error al actualizar producto", details: error.message });
@@ -194,6 +215,16 @@ export const deleteProduct = async (req, res) => {
     // Eliminar variantes primero (cascade debería hacerlo, pero por seguridad)
     await ProductVariant.destroy({ where: { productId: id } });
     await product.destroy();
+
+    // Registrar auditoría
+    await createAuditLog(
+      req.user.rut,
+      "DELETE",
+      "products",
+      id,
+      { name: product.name },
+      null
+    );
 
     res.json({ message: "Producto eliminado correctamente" });
   } catch (error) {

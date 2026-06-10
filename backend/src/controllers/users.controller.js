@@ -20,6 +20,7 @@ import {
   updateOwnProfileService,
   deleteUserService,
 } from "../services/users.service.js";
+import { createAuditLog } from "../helpers/audit.helper.js";
 
 function toResponseUser(user) {
   return {
@@ -70,6 +71,16 @@ export async function createUser(req, res) {
       role,
     });
 
+    // Registrar auditoría
+    await createAuditLog(
+      req.user.rut,
+      "CREATE",
+      "users",
+      normalizedRut,
+      null,
+      { rut: normalizedRut, full_name, email, role }
+    );
+
     return res.status(201).json(toResponseUser(user));
   } catch (error) {
     console.error("Error al crear usuario:", error);
@@ -114,6 +125,16 @@ export async function updateUser(req, res) {
       password,
     });
 
+    // Registrar auditoría
+    await createAuditLog(
+      req.user.rut,
+      "UPDATE",
+      "users",
+      currentRut,
+      { rut: currentRut },
+      { rut: newRut || currentRut, full_name, email, role }
+    );
+
     return res.status(200).json(toResponseUser(user));
   } catch (error) {
     console.error("Error al actualizar usuario:", error);
@@ -129,6 +150,17 @@ export async function deleteUser(req, res) {
     }
 
     const result = await deleteUserService(currentRut);
+
+    // Registrar auditoría
+    await createAuditLog(
+      req.user.rut,
+      "DELETE",
+      "users",
+      currentRut,
+      { rut: currentRut },
+      null
+    );
+
     return res.status(200).json(result);
   } catch (error) {
     console.error("Error al eliminar usuario:", error);
@@ -271,6 +303,22 @@ export async function updateProfile(req, res) {
       },
       currentPassword,
       isAdmin
+    );
+
+    // Registrar auditoría de cambio de perfil
+    const changedFields = {};
+    if (newRut) changedFields.rut = newRut;
+    if (full_name) changedFields.full_name = full_name;
+    if (email) changedFields.email = email;
+    if (newPassword) changedFields.password = "(cambiada)";
+
+    await createAuditLog(
+      currentRut,
+      "UPDATE_PROFILE",
+      "users",
+      currentRut,
+      null,
+      changedFields
     );
 
     return res.status(200).json(toResponseUser(updatedUser));

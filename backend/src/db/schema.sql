@@ -189,9 +189,9 @@ CREATE TABLE audit_logs (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     -- RUT del usuario que realizo la accion
     user_rut        VARCHAR(12) REFERENCES users(rut) ON DELETE SET NULL,
-    action          VARCHAR(20) NOT NULL CHECK (action IN ('INSERT', 'UPDATE', 'DELETE')),
+    action          VARCHAR(20) NOT NULL,
     table_affected  VARCHAR(100) NOT NULL,
-    record_id       UUID,
+    record_id       VARCHAR(255),
     -- Estado anterior y nuevo del registro (JSONB para flexibilidad)
     old_data        JSONB,
     new_data        JSONB,

@@ -14,7 +14,7 @@ const AuditLog = sequelize.define("AuditLog", {
     type: DataTypes.STRING,
   },
   recordId: {
-    type: DataTypes.UUID,
+    type: DataTypes.STRING,
   },
   oldData: {
     type: DataTypes.JSONB,
@@ -23,11 +23,11 @@ const AuditLog = sequelize.define("AuditLog", {
     type: DataTypes.JSONB,
   },
   createdAt: {
-    type: DataTypes.DATE, // TIMESTAMPTZ
+    type: DataTypes.DATE, 
   }
 }, {
   tableName: "audit_logs",
-  timestamps: false, // Como tienes tu campo createdAt manual
+  timestamps: false, 
 });
 
 export default AuditLog;
