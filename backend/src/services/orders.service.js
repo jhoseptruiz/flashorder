@@ -3,13 +3,15 @@ import CustomerOrder from "../models/CustomerOrder.js";
 import OrderItem from "../models/OrderItem.js";
 import ProductVariant from "../models/ProductVariant.js";
 import Product from "../models/Product.js";
+import Customer from "../models/Customer.js";
 import { Op } from "sequelize";
 import sequelize from "../db/db.js";
 
-// ── Include reutilizable con alias correctos ──────────────────────────────────
-// ProductVariant.belongsTo(Product, { as: 'product' })  → se necesita as:'product'
-
 const ORDER_INCLUDE = [
+  {
+    model: Customer,
+    attributes: ["fullName", "phone", "email"],
+  },
   {
     model: OrderItem,
     attributes: ["id", "quantity", "unitPrice", "productNameSnapshot"],
