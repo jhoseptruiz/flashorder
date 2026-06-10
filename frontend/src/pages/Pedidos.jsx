@@ -44,10 +44,20 @@ export default function Pedidos() {
     try {
       setLoading(true);
 
-      const startDate = new Date();
-      startDate.setDate(startDate.getDate() - 1);
-      const endDate = new Date();
-      endDate.setDate(endDate.getDate() + 7);
+      const startDate = new Date(
+        currentDate.getFullYear(),
+        currentDate.getMonth(),
+        1
+      );
+      const endDate = new Date(
+        currentDate.getFullYear(),
+        currentDate.getMonth() + 2,
+        0,
+        23,
+        59,
+        59,
+        999
+      );
 
       const [uberRes, activeRes] = await Promise.all([
         apiFetch(`/api/orders/employee/uber-pending`),
@@ -340,7 +350,7 @@ export default function Pedidos() {
                     style={{
                       padding: "8px 4px", borderRadius: 6,
                       border:     isSelected ? `2px solid ${primary}` : "1px solid var(--border)",
-                      background: isSelected ? `${primary}20` : isToday ? "var(--bg2, #f5f5f5)" : "transparent",
+                      background: isSelected ? `${primary}20` : isToday ? `${primary}10` : "transparent",
                       color: "var(--text)", fontSize: 11, fontWeight: isToday ? 700 : 500,
                       cursor: "pointer", display: "flex", flexDirection: "column",
                       alignItems: "center", justifyContent: "center", gap: 2, minHeight: 40,
