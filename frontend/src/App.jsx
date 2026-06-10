@@ -11,6 +11,7 @@ import Cocina from "./pages/Cocina";
 import Catalogo from "./pages/Catalogo";
 import Pedidos from "./pages/Pedidos";
 import Perfil from "./pages/Perfil";
+import POS from "./pages/POS";
 import "./styles/global.css";
 
 function AppContent() {
@@ -45,7 +46,7 @@ function AppContent() {
           
           <Route element={<ProtectedRoute allowedRoles={["admin", "empleado"]} />}>
             <Route path="/dashboard" element={<Home navKey="dashboard" />} />
-            <Route path="/pos" element={<Home navKey="pos" />} />
+            <Route path="/pos" element={<POS />} />
             <Route path="/invoices" element={<Home navKey="invoices" />} />
           </Route>
 
