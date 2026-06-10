@@ -38,6 +38,21 @@ async function setupAPI() {
     await sequelize.authenticate();
     console.log("=> Base de datos conectada vía Sequelize");
     
+    // Agregar columnas nuevas manualmente (evita conflicto con ENUMs en alter)
+    const addColumnIfNotExists = async (table, column, type, defaultVal) => {
+      try {
+        await sequelize.query(
+          `ALTER TABLE "${table}" ADD COLUMN IF NOT EXISTS "${column}" ${type}${defaultVal !== undefined ? ` DEFAULT ${defaultVal}` : ''};`
+        );
+      } catch (e) {
+        // Columna ya existe, ignorar
+      }
+    };
+
+    await addColumnIfNotExists("categories", "min_items", "INTEGER", 0);
+    await addColumnIfNotExists("categories", "max_items", "INTEGER", "NULL");
+    await addColumnIfNotExists("products", "related_category_id", "UUID", "NULL");
+
     await sequelize.sync();
     console.log("=> Modelos sincronizados con la base de datos");
 

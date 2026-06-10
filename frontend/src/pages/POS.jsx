@@ -134,7 +134,7 @@ export default function POS() {
     if (product.isComposite && product.baseCategoryId) {
       setLoadingRules(true);
       try {
-        const res = await apiFetch(`/api/pos/composition-rules?baseCategoryId=${product.baseCategoryId}`);
+        const res = await apiFetch(`/api/pos/composition-rules?baseCategoryId=${product.baseCategoryId}&independentCategoryId=${product.categoryId}`);
         if (res.ok) {
           const data = await res.json();
           setCompositionRules(data);
@@ -158,19 +158,30 @@ export default function POS() {
     if (!selectedProduct) return;
 
     if (selectedProduct.isComposite) {
+      // Validar mínimos
+      for (const rule of compositionRules) {
+        const selections = compositeSelections[rule.id] || [];
+        const minRequired = rule.minItems || 0;
+        if (selections.length < minRequired) {
+          showToast(`Selecciona al menos ${minRequired} ítem(s) de ${rule.AllowedCategory?.name || "una categoría"}`, "error");
+          return;
+        }
+      }
+
       // Producto compuesto: armar nombre descriptivo
       const parts = compositionRules.map((rule) => {
-        const sel = compositeSelections[rule.id];
-        if (!sel) return null;
+        const selections = compositeSelections[rule.id] || [];
+        if (selections.length === 0) return null;
         const catName = rule.AllowedCategory?.name || "Opción";
-        return `${catName}: ${sel.product.name} (${sel.variant.variantName})`;
+        const items = selections.map(s => `${s.product.name} (${s.variant.variantName})`).join(", ");
+        return `${catName}: ${items}`;
       }).filter(Boolean);
 
-      const variantDesc = parts.join(", ");
+      const variantDesc = parts.join(" | ");
       
       const componentsPrice = compositionRules.reduce((sum, rule) => {
-         const sel = compositeSelections[rule.id];
-         return sum + (sel ? sel.variant.price : 0);
+        const selections = compositeSelections[rule.id] || [];
+        return sum + selections.reduce((s, sel) => s + sel.variant.price, 0);
       }, 0);
 
       const baseVariant = selectedProduct.variants?.[0];
@@ -491,7 +502,7 @@ export default function POS() {
 
             {selectedProduct.isComposite ? (
               /* ── Producto Compuesto ── */
-              <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
                 {loadingRules ? (
                   <div style={{ color: "var(--text2)", fontSize: 13 }}>Cargando opciones...</div>
                 ) : compositionRules.length === 0 ? (
@@ -501,40 +512,87 @@ export default function POS() {
                     const cat = rule.AllowedCategory;
                     if (!cat) return null;
                     const prods = cat.Products || [];
+                    const selections = compositeSelections[rule.id] || [];
+                    const minItems = rule.minItems || 0;
+                    const maxItems = rule.maxItems || null;
+                    const canAdd = maxItems === null || selections.length < maxItems;
+                    const meetsMin = selections.length >= minItems;
+
                     return (
-                      <label key={rule.id} style={S.label}>
-                        <span style={{ fontWeight: 700, fontSize: 14, color: "var(--text)" }}>{cat.name}:</span>
-                        <select
-                          className="input-field"
-                          value={compositeSelections[rule.id]?.variant?.id || ""}
-                          onChange={(e) => {
-                            const variantId = e.target.value;
-                            let selectedProduct = null;
-                            let selectedVariant = null;
-                            for (const p of prods) {
-                              const v = p.variants?.find(v => v.id === variantId);
-                              if (v) {
-                                selectedProduct = p;
-                                selectedVariant = v;
-                                break;
+                      <div key={rule.id} style={{ background: "var(--surface2)", borderRadius: 10, padding: "14px 16px", border: !meetsMin && selections.length === 0 ? "1px solid #f59e0b44" : "1px solid transparent" }}>
+                        {/* Header con nombre y contador */}
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                          <span style={{ fontWeight: 700, fontSize: 14, color: "var(--text)" }}>{cat.name}</span>
+                          <span style={{ fontSize: 11, fontWeight: 600, padding: "2px 10px", borderRadius: 999, background: meetsMin ? "#dcfce7" : "#fef3c7", color: meetsMin ? "#15803d" : "#92400e" }}>
+                            {selections.length}{maxItems ? `/${maxItems}` : ""} {minItems > 0 ? `(mín: ${minItems})` : "(opcional)"}
+                          </span>
+                        </div>
+
+                        {/* Selector para agregar */}
+                        {canAdd && (
+                          <select
+                            className="input-field"
+                            value=""
+                            onChange={(e) => {
+                              const variantId = e.target.value;
+                              if (!variantId) return;
+                              let foundProduct = null;
+                              let foundVariant = null;
+                              for (const p of prods) {
+                                const v = p.variants?.find(v => v.id === variantId);
+                                if (v) {
+                                  foundProduct = p;
+                                  foundVariant = v;
+                                  break;
+                                }
                               }
-                            }
-                            setCompositeSelections((prev) => ({
-                              ...prev,
-                              [rule.id]: selectedVariant ? { product: selectedProduct, variant: selectedVariant } : null,
-                            }));
-                          }}
-                        >
-                          <option value="">Seleccionar {cat.name.toLowerCase()}</option>
-                          {prods.flatMap(p => 
-                            (p.variants || []).filter(v => v.isActive !== false).map(v => (
-                              <option key={v.id} value={v.id}>
-                                {p.name} - {v.variantName} (+{fmt(v.price)})
-                              </option>
-                            ))
-                          )}
-                        </select>
-                      </label>
+                              if (foundVariant) {
+                                setCompositeSelections((prev) => ({
+                                  ...prev,
+                                  [rule.id]: [...(prev[rule.id] || []), { product: foundProduct, variant: foundVariant }],
+                                }));
+                              }
+                            }}
+                            style={{ marginBottom: selections.length > 0 ? 10 : 0 }}
+                          >
+                            <option value="">+ Agregar {cat.name.toLowerCase()}...</option>
+                            {prods.flatMap(p => 
+                              (p.variants || []).filter(v => v.isActive !== false).map(v => (
+                                <option key={v.id} value={v.id}>
+                                  {p.name} - {v.variantName} (+{fmt(v.price)})
+                                </option>
+                              ))
+                            )}
+                          </select>
+                        )}
+
+                        {/* Lista de selecciones */}
+                        {selections.length > 0 && (
+                          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                            {selections.map((sel, idx) => (
+                              <div key={idx} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "6px 10px", background: "var(--surface)", borderRadius: 8, border: "1px solid var(--border)" }}>
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                  <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>{sel.product.name}</span>
+                                  <span style={{ fontSize: 12, color: "var(--text2)", marginLeft: 6 }}>{sel.variant.variantName}</span>
+                                </div>
+                                <span style={{ fontSize: 12, fontWeight: 700, color: primary, marginRight: 8 }}>+{fmt(sel.variant.price)}</span>
+                                <button
+                                  onClick={() => {
+                                    setCompositeSelections((prev) => {
+                                      const updated = [...(prev[rule.id] || [])];
+                                      updated.splice(idx, 1);
+                                      return { ...prev, [rule.id]: updated };
+                                    });
+                                  }}
+                                  style={{ border: "none", background: "transparent", cursor: "pointer", color: "#dc2626", fontSize: 15, padding: 2 }}
+                                >
+                                  <i className="ti ti-x" />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     );
                   })
                 )}

@@ -53,13 +53,13 @@ export async function createOrderController(req, res) {
 
 export async function getCompositionRulesController(req, res) {
   try {
-    const { baseCategoryId } = req.query;
+    const { baseCategoryId, independentCategoryId } = req.query;
 
     if (!baseCategoryId) {
       return res.status(400).json({ error: "baseCategoryId es requerido" });
     }
 
-    const rules = await getCompositionRules(baseCategoryId);
+    const rules = await getCompositionRules(baseCategoryId, independentCategoryId || null);
     res.json(rules);
   } catch (error) {
     console.error("Error en getCompositionRulesController:", error);

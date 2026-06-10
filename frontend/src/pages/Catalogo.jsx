@@ -69,7 +69,7 @@ export default function Catalogo() {
 
   // ─── Category CRUD ────────────────────────────────
   const openCatCreate = () =>
-    setCatModal({ open: true, data: { name: "", behavior: "independiente", displayOrder: 0 } });
+    setCatModal({ open: true, data: { name: "", behavior: "independiente", displayOrder: 0, minItems: 0, maxItems: "" } });
 
   const openCatEdit = (cat) =>
     setCatModal({ open: true, data: { ...cat } });
@@ -127,6 +127,7 @@ export default function Catalogo() {
         categoryId: "",
         isComposite: false,
         baseCategoryId: "",
+        relatedCategoryId: "",
         variants: [{ variantName: "Única", price: "" }],
       },
     });
@@ -140,6 +141,7 @@ export default function Catalogo() {
         categoryId: prod.categoryId,
         isComposite: prod.isComposite,
         baseCategoryId: prod.baseCategoryId || "",
+        relatedCategoryId: prod.relatedCategoryId || "",
         variants: prod.variants?.map((v) => ({
           id: v.id,
           variantName: v.variantName,
@@ -490,7 +492,7 @@ function CategoryRow({ category, primary, onEdit, onDelete }) {
           <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
             {category.name}
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 4 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 4, flexWrap: "wrap" }}>
             <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 10px", borderRadius: 999, background: beh.bg, color: beh.color }}>
               {beh.label}
             </span>
@@ -500,6 +502,11 @@ function CategoryRow({ category, primary, onEdit, onDelete }) {
             <span style={{ fontSize: 12, color: "var(--text2)" }}>
               Orden: {category.displayOrder}
             </span>
+            {(category.behavior === "base" || category.behavior === "complemento") && (
+              <span style={{ fontSize: 11, fontWeight: 600, padding: "2px 10px", borderRadius: 999, background: "#f0fdf4", color: "#166534" }}>
+                Mín: {category.minItems ?? 0} / Máx: {category.maxItems ?? "∞"}
+              </span>
+            )}
           </div>
         </div>
       </div>
@@ -522,14 +529,24 @@ function CategoryRow({ category, primary, onEdit, onDelete }) {
 // ════════════════════════════════════════════════════════
 
 function CategoryModal({ data, primary, onClose, onSave }) {
-  const [form, setForm] = useState({ ...data });
+  const [form, setForm] = useState({ ...data, minItems: data.minItems ?? 0, maxItems: data.maxItems ?? "" });
   const [submitting, setSubmitting] = useState(false);
   const isEdit = !!form.id;
 
+  const isBaseOrComplemento = form.behavior === "base" || form.behavior === "complemento";
+
   const handleSubmit = async (e) => {
     e.preventDefault();
+    const payload = { ...form };
+    if (!isBaseOrComplemento) {
+      payload.minItems = 0;
+      payload.maxItems = null;
+    } else {
+      payload.minItems = parseInt(payload.minItems) || 0;
+      payload.maxItems = payload.maxItems === "" || payload.maxItems === null ? null : parseInt(payload.maxItems);
+    }
     setSubmitting(true);
-    await onSave(form);
+    await onSave(payload);
     setSubmitting(false);
   };
 
@@ -573,6 +590,41 @@ function CategoryModal({ data, primary, onClose, onSave }) {
             </Field>
           </div>
 
+          {/* Campos de mínimos y máximos (solo para base/complemento) */}
+          {isBaseOrComplemento && (
+            <div style={{ background: "var(--surface2)", borderRadius: 10, padding: "14px 18px" }}>
+              <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14, fontWeight: 600, color: "var(--text)", marginBottom: 12 }}>
+                <i className="ti ti-adjustments-horizontal" style={{ fontSize: 18, color: "var(--text2)" }} />
+                Límites de selección
+              </label>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+                <Field label="Mínimo de ítems">
+                  <input
+                    className="input-field"
+                    type="number"
+                    min="0"
+                    value={form.minItems}
+                    onChange={(e) => setForm({ ...form, minItems: parseInt(e.target.value) || 0 })}
+                    placeholder="0"
+                  />
+                </Field>
+                <Field label="Máximo de ítems">
+                  <input
+                    className="input-field"
+                    type="number"
+                    min="0"
+                    value={form.maxItems}
+                    onChange={(e) => setForm({ ...form, maxItems: e.target.value })}
+                    placeholder="Sin límite"
+                  />
+                </Field>
+              </div>
+              <p style={{ fontSize: 11, color: "var(--text2)", marginTop: 8 }}>
+                Define cuántos ítems de esta categoría se pueden seleccionar al armar un producto compuesto. Deja el máximo vacío para no limitar.
+              </p>
+            </div>
+          )}
+
           {/* Hint */}
           <div style={{ background: "var(--surface2)", borderRadius: 10, padding: "12px 16px", fontSize: 12, color: "var(--text2)", lineHeight: 1.5 }}>
             <strong style={{ color: "var(--text)" }}>Comportamientos:</strong><br />
@@ -606,6 +658,13 @@ function ProductModal({ data, categorias, primary, primaryLight, onClose, onSave
 
   // Categorías filtradas para la base (solo las de tipo "base")
   const baseCategories = categorias.filter((c) => c.behavior === "base");
+
+  // Categorías independientes (para asociar productos base/complemento)
+  const independentCategories = categorias.filter((c) => c.behavior === "independiente");
+
+  // Determinar si la categoría seleccionada es base o complemento
+  const selectedCat = categorias.find((c) => c.id === form.categoryId);
+  const isBaseOrComplementoCat = selectedCat?.behavior === "base" || selectedCat?.behavior === "complemento";
 
   const addVariant = () => {
     setForm({ ...form, variants: [...form.variants, { variantName: "", price: "" }] });
@@ -656,16 +715,37 @@ function ProductModal({ data, categorias, primary, primaryLight, onClose, onSave
               <select
                 className="input-field"
                 value={form.categoryId}
-                onChange={(e) => setForm({ ...form, categoryId: e.target.value })}
+                onChange={(e) => setForm({ ...form, categoryId: e.target.value, relatedCategoryId: "" })}
                 required
               >
                 <option value="" disabled>Seleccionar categoría…</option>
                 {categorias.map((c) => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
+                  <option key={c.id} value={c.id}>{c.name} ({c.behavior})</option>
                 ))}
               </select>
             </Field>
           </div>
+
+          {/* Categoría independiente relacionada (solo para base/complemento) */}
+          {isBaseOrComplementoCat && (
+            <div style={{ background: "var(--surface2)", borderRadius: 10, padding: "14px 18px" }}>
+              <Field label="Relacionar con categoría independiente">
+                <select
+                  className="input-field"
+                  value={form.relatedCategoryId}
+                  onChange={(e) => setForm({ ...form, relatedCategoryId: e.target.value })}
+                >
+                  <option value="">Sin relación específica</option>
+                  {independentCategories.map((c) => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+              </Field>
+              <p style={{ fontSize: 11, color: "var(--text2)", marginTop: 6 }}>
+                <i className="ti ti-info-circle" style={{ fontSize: 13 }} /> Define a qué producto independiente pertenece este ingrediente/base (ej: ingredientes de Pizza vs Hamburguesa).
+              </p>
+            </div>
+          )}
 
           {/* Composite toggle */}
           <div style={{ background: "var(--surface2)", borderRadius: 10, padding: "14px 18px" }}>

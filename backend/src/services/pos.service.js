@@ -96,41 +96,62 @@ export async function createOrder({
 }
 
 // ── Obtener reglas de composición para un producto compuesto ──────────────────
-export async function getCompositionRules(baseCategoryId) {
+export async function getCompositionRules(baseCategoryId, independentCategoryId) {
   try {
     if (!baseCategoryId) {
       throw new Error("baseCategoryId es requerido");
     }
 
-    // Buscar las reglas ordenadas por stepOrder
-    const rules = await CompositionRule.findAll({
-      where: { baseCategoryId },
+    // Estrategia: Buscar las categorías base/complemento cuyos productos
+    // están relacionados con la categoría independiente del producto compuesto.
+    // Luego usar minItems/maxItems de cada categoría.
+
+    // 1. Buscar categorías de tipo base o complemento que tengan productos
+    //    con relatedCategoryId apuntando a la categoría independiente
+    const whereProduct = { isActive: true };
+    if (independentCategoryId) {
+      whereProduct.relatedCategoryId = independentCategoryId;
+    }
+
+    const categories = await Category.findAll({
+      where: {
+        behavior: ["base", "complemento"],
+        isActive: true,
+      },
       include: [
         {
-          model: Category,
-          as: "AllowedCategory",
-          attributes: ["id", "name", "behavior"],
+          model: Product,
+          attributes: ["id", "name", "isActive", "relatedCategoryId"],
+          where: whereProduct,
+          required: true,
           include: [
             {
-              model: Product,
-              attributes: ["id", "name", "isActive"],
+              model: ProductVariant,
+              as: "variants",
+              attributes: ["id", "variantName", "price", "isActive"],
               where: { isActive: true },
               required: false,
-              include: [
-                {
-                  model: ProductVariant,
-                  as: "variants",
-                  attributes: ["id", "variantName", "price", "isActive"],
-                  where: { isActive: true },
-                  required: false,
-                },
-              ],
             },
           ],
         },
       ],
-      order: [["stepOrder", "ASC"]],
+      order: [["displayOrder", "ASC"]],
     });
+
+    // 2. Transformar los resultados al formato esperado por el frontend
+    //    (compatible con la estructura anterior de CompositionRule)
+    const rules = categories.map((cat, index) => ({
+      id: cat.id,
+      minItems: cat.minItems,
+      maxItems: cat.maxItems,
+      stepOrder: index + 1,
+      AllowedCategory: {
+        id: cat.id,
+        name: cat.name,
+        behavior: cat.behavior,
+        Products: cat.Products,
+      },
+    }));
 
     return rules;
   } catch (error) {

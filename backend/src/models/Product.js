@@ -22,6 +22,11 @@ const Product = sequelize.define("Product", {
   isActive: {
     type: DataTypes.BOOLEAN,
     defaultValue: true,
+  },
+  relatedCategoryId: {
+    type: DataTypes.UUID,
+    allowNull: true,
+    defaultValue: null,
   }
 }, {
   tableName: "products",

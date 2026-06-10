@@ -21,6 +21,10 @@ Product.belongsTo(Category, { foreignKey: 'categoryId' });
 Category.hasMany(Product, { foreignKey: 'baseCategoryId', as: 'CompositeProducts' });
 Product.belongsTo(Category, { foreignKey: 'baseCategoryId', as: 'BaseCategory' });
 
+// Products "pertenece a categoría independiente" (ej: ingredientes de Pizza)
+Category.hasMany(Product, { foreignKey: 'relatedCategoryId', as: 'RelatedBasesOrComplements' });
+Product.belongsTo(Category, { foreignKey: 'relatedCategoryId', as: 'RelatedIndependentCategory' });
+
 // Category "define_base" y "define_complemento" en CompositionRules
 Category.hasMany(CompositionRule, { foreignKey: 'baseCategoryId', as: 'BaseRules' });
 CompositionRule.belongsTo(Category, { foreignKey: 'baseCategoryId', as: 'BaseCategory' });

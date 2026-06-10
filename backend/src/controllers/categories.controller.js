@@ -29,16 +29,20 @@ export const getCategories = async (req, res) => {
 // POST /api/catalog/categories
 export const createCategory = async (req, res) => {
   try {
-    const { name, behavior, displayOrder } = req.body;
+    const { name, behavior, displayOrder, minItems, maxItems } = req.body;
 
     if (!name || !name.trim()) {
       return res.status(400).json({ error: "El nombre es obligatorio" });
     }
 
+    const isBaseOrComplemento = behavior === "base" || behavior === "complemento";
+
     const newCategory = await Category.create({
       name: name.trim(),
       behavior: behavior || "independiente",
       displayOrder: displayOrder ?? 0,
+      minItems: isBaseOrComplemento ? (minItems ?? 0) : 0,
+      maxItems: isBaseOrComplemento ? (maxItems ?? null) : null,
     });
 
     // Registrar auditoría
@@ -64,19 +68,24 @@ export const createCategory = async (req, res) => {
 export const updateCategory = async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, behavior, displayOrder, isActive } = req.body;
+    const { name, behavior, displayOrder, isActive, minItems, maxItems } = req.body;
 
     const category = await Category.findByPk(id);
     if (!category) {
       return res.status(404).json({ error: "Categoría no encontrada" });
     }
 
-    const oldData = { name: category.name, behavior: category.behavior, displayOrder: category.displayOrder, isActive: category.isActive };
+    const oldData = { name: category.name, behavior: category.behavior, displayOrder: category.displayOrder, isActive: category.isActive, minItems: category.minItems, maxItems: category.maxItems };
 
     if (name !== undefined) category.name = name.trim();
     if (behavior !== undefined) category.behavior = behavior;
     if (displayOrder !== undefined) category.displayOrder = displayOrder;
     if (isActive !== undefined) category.isActive = isActive;
+
+    const effectiveBehavior = behavior !== undefined ? behavior : category.behavior;
+    const isBaseOrComplemento = effectiveBehavior === "base" || effectiveBehavior === "complemento";
+    if (minItems !== undefined) category.minItems = isBaseOrComplemento ? minItems : 0;
+    if (maxItems !== undefined) category.maxItems = isBaseOrComplemento ? maxItems : null;
 
     await category.save();
 

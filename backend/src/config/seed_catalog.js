@@ -19,12 +19,12 @@ async function seedCatalog() {
 
     const [catMasas] = await Category.findOrCreate({
       where: { name: "Masas de Pizza" },
-      defaults: { behavior: "base", displayOrder: 3, isActive: true }
+      defaults: { behavior: "base", displayOrder: 3, isActive: true, minItems: 1, maxItems: 1 }
     });
 
     const [catIngredientes] = await Category.findOrCreate({
       where: { name: "Ingredientes Extra" },
-      defaults: { behavior: "complemento", displayOrder: 4, isActive: true }
+      defaults: { behavior: "complemento", displayOrder: 4, isActive: true, minItems: 0, maxItems: 5 }
     });
 
     console.log("Categorías listas.");
@@ -44,28 +44,28 @@ async function seedCatalog() {
     await ProductVariant.findOrCreate({ where: { productId: prodMargarita.id, variantName: "Familiar" }, defaults: { price: 10000, isActive: true } });
     await ProductVariant.findOrCreate({ where: { productId: prodMargarita.id, variantName: "Mediana" }, defaults: { price: 8000, isActive: true } });
 
-    // 3. Productos para componentes
+    // 3. Productos para componentes (con relatedCategoryId apuntando a Pizzas)
     const [prodMasaTrad] = await Product.findOrCreate({
       where: { name: "Masa Tradicional" },
-      defaults: { categoryId: catMasas.id, isComposite: false, isActive: true }
+      defaults: { categoryId: catMasas.id, isComposite: false, isActive: true, relatedCategoryId: catPizzas.id }
     });
     await ProductVariant.findOrCreate({ where: { productId: prodMasaTrad.id, variantName: "Única" }, defaults: { price: 3000, isActive: true } });
 
     const [prodMasaPiedra] = await Product.findOrCreate({
       where: { name: "Masa a la Piedra" },
-      defaults: { categoryId: catMasas.id, isComposite: false, isActive: true }
+      defaults: { categoryId: catMasas.id, isComposite: false, isActive: true, relatedCategoryId: catPizzas.id }
     });
     await ProductVariant.findOrCreate({ where: { productId: prodMasaPiedra.id, variantName: "Única" }, defaults: { price: 3500, isActive: true } });
 
     const [prodQueso] = await Product.findOrCreate({
       where: { name: "Extra Queso" },
-      defaults: { categoryId: catIngredientes.id, isComposite: false, isActive: true }
+      defaults: { categoryId: catIngredientes.id, isComposite: false, isActive: true, relatedCategoryId: catPizzas.id }
     });
     await ProductVariant.findOrCreate({ where: { productId: prodQueso.id, variantName: "Porción" }, defaults: { price: 1000, isActive: true } });
 
     const [prodPeppe] = await Product.findOrCreate({
       where: { name: "Pepperoni" },
-      defaults: { categoryId: catIngredientes.id, isComposite: false, isActive: true }
+      defaults: { categoryId: catIngredientes.id, isComposite: false, isActive: true, relatedCategoryId: catPizzas.id }
     });
     await ProductVariant.findOrCreate({ where: { productId: prodPeppe.id, variantName: "Porción" }, defaults: { price: 1500, isActive: true } });
 
@@ -83,7 +83,7 @@ async function seedCatalog() {
 
     console.log("Productos y variantes listos.");
 
-    // 5. Reglas de composición
+    // 5. Reglas de composición (mantenidas por retrocompatibilidad)
     await CompositionRule.findOrCreate({
       where: { baseCategoryId: catMasas.id, allowedCategoryId: catMasas.id },
       defaults: { minItems: 1, maxItems: 1, stepOrder: 1 }

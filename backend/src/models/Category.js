@@ -21,6 +21,16 @@ const Category = sequelize.define("Category", {
     defaultValue: 0,
     allowNull: false,
   },
+  minItems: {
+    type: DataTypes.INTEGER,
+    defaultValue: 0,
+    allowNull: false,
+  },
+  maxItems: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    defaultValue: null,
+  },
   isActive: {
     type: DataTypes.BOOLEAN,
     defaultValue: true,

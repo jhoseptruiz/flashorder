@@ -36,7 +36,7 @@ export const getProducts = async (req, res) => {
 export const createProduct = async (req, res) => {
   const transaction = await sequelize.transaction();
   try {
-    const { name, categoryId, isComposite, baseCategoryId, variants } = req.body;
+    const { name, categoryId, isComposite, baseCategoryId, relatedCategoryId, variants } = req.body;
 
     // Validaciones
     if (!name || !name.trim()) {
@@ -72,6 +72,7 @@ export const createProduct = async (req, res) => {
         categoryId,
         isComposite: isComposite || false,
         baseCategoryId: isComposite ? baseCategoryId : null,
+        relatedCategoryId: relatedCategoryId || null,
       },
       { transaction }
     );
@@ -117,7 +118,7 @@ export const updateProduct = async (req, res) => {
   const transaction = await sequelize.transaction();
   try {
     const { id } = req.params;
-    const { name, categoryId, isComposite, baseCategoryId, isActive, variants } = req.body;
+    const { name, categoryId, isComposite, baseCategoryId, relatedCategoryId, isActive, variants } = req.body;
 
     const product = await Product.findByPk(id, { transaction });
     if (!product) {
@@ -130,6 +131,7 @@ export const updateProduct = async (req, res) => {
     if (categoryId !== undefined) product.categoryId = categoryId;
     if (isComposite !== undefined) product.isComposite = isComposite;
     if (baseCategoryId !== undefined) product.baseCategoryId = isComposite ? baseCategoryId : null;
+    if (relatedCategoryId !== undefined) product.relatedCategoryId = relatedCategoryId || null;
     if (isActive !== undefined) product.isActive = isActive;
 
     await product.save({ transaction });
