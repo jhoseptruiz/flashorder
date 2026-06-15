@@ -4,6 +4,7 @@ import Customer from "../models/Customer.js";
 import CustomerOrder from "../models/CustomerOrder.js";
 import OrderItem from "../models/OrderItem.js";
 import { Category, CompositionRule, Product, ProductVariant } from "../models/index.models.js";
+import { sendReceiptEmail } from "./email.service.js";
 
 // ── Crear pedido desde el POS ─────────────────────────────────────────────────
 export async function createOrder({
@@ -13,6 +14,8 @@ export async function createOrder({
   depositAmount = 0,
   paymentMethod,
   notes,
+  companyName,
+  companyLogo,
   createdByRut,
 }) {
   const transaction = await sequelize.transaction();
@@ -52,6 +55,9 @@ export async function createOrder({
         deliveryDate: deliveryDate ? new Date(deliveryDate) : null,
         totalAmount,
         depositAmount: depositAmount || 0,
+        paymentMethod: paymentMethod || null,
+        companyName: companyName || null,
+        companyLogo: companyLogo || null,
         source: "local",
         status: "pendiente",
         notes: notes || null,
@@ -73,6 +79,19 @@ export async function createOrder({
     await OrderItem.bulkCreate(orderItems, { transaction });
 
     await transaction.commit();
+
+    // Enviar boleta por correo sin bloquear la respuesta
+    void sendReceiptEmail({
+      ...order.get({ plain: true }),
+      Customer: newCustomer.get({ plain: true }),
+      OrderItems: orderItems.map((item, index) => ({
+        ...item,
+        id: index.toString(),
+        subtotal: item.subtotal,
+      })),
+    }, { companyName, companyLogo }).catch((error) => {
+      console.error("Error al enviar boleta por correo:", error);
+    });
 
     // 7. Retornar la orden completa
     const fullOrder = await CustomerOrder.findByPk(order.id, {
