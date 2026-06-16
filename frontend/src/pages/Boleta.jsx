@@ -98,7 +98,122 @@ export default function Boleta({ order, onClose }) {
           </table>
         </div>
 
-        <div style={{ marginTop: 22, display: "flex", justifyContent: "flex-end", gap: 20, flexWrap: "wrap" }}>
+        <div style={{ marginTop: 22, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 20, flexWrap: "wrap" }}>
+          <button
+            type="button"
+            onClick={() => {
+              const printWindow = window.open('', '_blank', 'width=800,height=800');
+              const itemsHtml = order.OrderItems?.map(item => `
+                <tr style="border-bottom: 1px solid #ddd;">
+                  <td style="padding: 12px 8px; font-size: 13px;">${item.productNameSnapshot}</td>
+                  <td style="padding: 12px 8px; font-size: 13px; text-align: center;">${item.quantity}</td>
+                  <td style="padding: 12px 8px; font-size: 13px; text-align: right;">$${Number(item.unitPrice).toLocaleString("es-CL")}</td>
+                  <td style="padding: 12px 8px; font-size: 13px; text-align: right;">$${Number(item.subtotal || item.quantity * item.unitPrice).toLocaleString("es-CL")}</td>
+                </tr>
+              `).join('') || '';
+
+              printWindow.document.write(`
+                <html>
+                  <head>
+                    <title>Boleta - ${order.id?.substring(0, 8).toUpperCase()}</title>
+                    <style>
+                      body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; padding: 30px; color: #333; }
+                      .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; }
+                      .company-info { display: flex; align-items: center; gap: 15px; }
+                      .logo { width: 60px; height: 60px; border-radius: 12px; background: #eee; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 20px; color: ${primary}; }
+                      .logo img { width: 100%; height: 100%; object-fit: cover; border-radius: 12px; }
+                      .title { font-size: 22px; margin: 0; }
+                      .order-info { text-align: right; }
+                      .order-id { font-weight: bold; font-size: 18px; color: ${primary}; }
+                      .date { font-size: 12px; color: #666; margin-top: 4px; }
+                      .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 30px; }
+                      .panel { border: 1px solid #eee; border-radius: 12px; padding: 15px; background: #fafafa; }
+                      .panel-title { font-size: 12px; color: #666; margin-bottom: 8px; text-transform: uppercase; }
+                      .panel-body { font-weight: bold; font-size: 14px; }
+                      .panel-desc { font-size: 12px; color: #666; margin-top: 4px; }
+                      table { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
+                      th { padding: 12px; text-align: left; font-size: 12px; color: #666; border-bottom: 2px solid #eee; }
+                      .total-container { display: flex; justify-content: flex-end; }
+                      .total-box { min-width: 240px; padding: 15px; border-radius: 12px; background: #fafafa; border: 1px solid #eee; }
+                      .total-row { display: flex; justify-content: space-between; font-weight: bold; font-size: 16px; }
+                    </style>
+                  </head>
+                  <body>
+                    <div class="header">
+                      <div class="company-info">
+                        <div class="logo">
+                          ${companyLogo ? `<img src="${companyLogo}" />` : companyName?.slice(0, 2).toUpperCase()}
+                        </div>
+                        <div>
+                          <div style="font-size: 12px; color: #666; margin-bottom: 2px;">Boleta</div>
+                          <h2 class="title">${companyName}</h2>
+                        </div>
+                      </div>
+                      <div class="order-info">
+                        <div style="font-size: 12px; color: #666; margin-bottom: 2px;">Pedido</div>
+                        <div class="order-id">${order.id?.substring(0, 8).toUpperCase()}</div>
+                        <div class="date">${formatDate(order.orderDate)}</div>
+                      </div>
+                    </div>
+
+                    <div class="grid">
+                      <div class="panel">
+                        <div class="panel-title">Cliente</div>
+                        <div class="panel-body">${order.Customer?.fullName || "Cliente"}</div>
+                        <div class="panel-desc">${order.Customer?.phone || "-"}</div>
+                        <div class="panel-desc">${order.Customer?.email || "-"}</div>
+                      </div>
+                      <div class="panel">
+                        <div class="panel-title">Entrega</div>
+                        <div class="panel-body">${order.deliveryDate ? formatDate(order.deliveryDate) : "No definida"}</div>
+                        <div class="panel-desc">Método: ${order.paymentMethod || "No definido"}</div>
+                      </div>
+                    </div>
+
+                    <table>
+                      <thead>
+                        <tr>
+                          <th style="text-align: left;">Producto</th>
+                          <th style="text-align: center; width: 60px;">Cant.</th>
+                          <th style="text-align: right; width: 100px;">Precio</th>
+                          <th style="text-align: right; width: 120px;">Subtotal</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        ${itemsHtml}
+                      </tbody>
+                    </table>
+
+                    <div class="total-container">
+                      <div class="total-box">
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 8px; color: #666; font-size: 12px;">Total</div>
+                        <div class="total-row">
+                          <span>Total</span>
+                          <span>$${totalAmount.toLocaleString("es-CL")}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <script>
+                      window.onload = function() {
+                        window.print();
+                        window.close();
+                      }
+                    </script>
+                  </body>
+                </html>
+              `);
+              printWindow.document.close();
+            }}
+            style={{
+              border: "none", borderRadius: 10, background: "linear-gradient(135deg, #059669, #10b981)",
+              color: "#fff", padding: "12px 20px", cursor: "pointer", fontWeight: 700,
+              fontFamily: "'DM Sans', sans-serif", display: "inline-flex", alignItems: "center", gap: 8
+            }}
+          >
+            <i className="ti ti-printer" /> Imprimir Boleta
+          </button>
+
           <div style={{ minWidth: 240, padding: 16, borderRadius: 16, background: "var(--surface2)", border: "1px solid var(--border)" }}>
             <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8, color: "var(--text2)", fontSize: 12 }}>Total</div>
             <div style={{ display: "flex", justifyContent: "space-between", fontSize: 16, fontWeight: 700, color: "var(--text)" }}>

@@ -2,11 +2,14 @@ import { useEffect, useState } from "react";
 import { useTheme } from "../context/ThemeContext";
 import { useAuth } from "../context/AuthContext";
 import { apiFetch } from "../utils/apiFetch";
+import Boleta from "./Boleta";
 
 // ── Mapeo de acciones a etiquetas legibles y colores ────────────────────────
 const ACTION_MAP = {
   LOGIN:          { label: "Inicio de sesión",      icon: "ti-login",          color: "#3b82f6" },
   LOGOUT:         { label: "Cierre de sesión",      icon: "ti-logout",         color: "#64748b" },
+  OPEN_REGISTER:  { label: "Inicio de turno",       icon: "ti-lock-open",      color: "#10b981" },
+  CLOSE_REGISTER: { label: "Cierre de turno",       icon: "ti-lock",           color: "#f97316" },
   CREATE:         { label: "Creación",              icon: "ti-plus",           color: "#22c55e" },
   UPDATE:         { label: "Edición",               icon: "ti-edit",           color: "#f59e0b" },
   UPDATE_STATUS:  { label: "Cambio de estado",      icon: "ti-arrows-exchange",color: "#8b5cf6" },
@@ -20,6 +23,7 @@ const TABLE_MAP = {
   users:           "Usuarios",
   products:        "Productos",
   categories:      "Categorías",
+  cash_register_sessions: "Caja",
 };
 
 // ── Mapeo de estados de pedidos ───────────────────────────────────────────
@@ -70,6 +74,18 @@ function buildDescription(log, isAdmin) {
       : "Cerraste sesión";
   }
 
+  if (action === "OPEN_REGISTER") {
+    return isAdmin && userName
+      ? `${userName} inició turno (abrió caja)`
+      : "Iniciaste turno (abriste caja)";
+  }
+
+  if (action === "CLOSE_REGISTER") {
+    return isAdmin && userName
+      ? `${userName} cerró turno (cerró caja)`
+      : "Cerraste turno (cerraste caja)";
+  }
+
   if (action === "UPDATE_STATUS" && log.oldData?.status && log.newData?.status) {
     const from = STATUS_MAP[log.oldData.status] || log.oldData.status;
     const to = STATUS_MAP[log.newData.status] || log.newData.status;
@@ -112,7 +128,7 @@ function buildDescription(log, isAdmin) {
 
 const FILTER_CATEGORIES = [
   { id: "all", label: "Todos" },
-  { id: "turnos", label: "Inicio / Cierre de turno" },
+  { id: "turnos", label: "Apertura / Cierre de caja" },
   { id: "pedidos", label: "Pedidos" },
   { id: "otros", label: "Otros" }
 ];
@@ -125,6 +141,7 @@ export default function Auditoria() {
   const [filter, setFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [expandedId, setExpandedId] = useState(null);
+  const [selectedInvoice, setSelectedInvoice] = useState(null);
 
   const isAdmin = user?.role === "admin";
 
@@ -154,11 +171,11 @@ export default function Auditoria() {
     if (filter === "all") {
       matchesCategory = true;
     } else if (filter === "turnos") {
-      matchesCategory = ["LOGIN", "LOGOUT"].includes(log.action);
+      matchesCategory = ["OPEN_REGISTER", "CLOSE_REGISTER"].includes(log.action);
     } else if (filter === "pedidos") {
       matchesCategory = log.tableAffected === "customer_orders";
     } else if (filter === "otros") {
-      const isTurno = ["LOGIN", "LOGOUT"].includes(log.action);
+      const isTurno = ["OPEN_REGISTER", "CLOSE_REGISTER"].includes(log.action);
       const isPedido = log.tableAffected === "customer_orders";
       matchesCategory = !isTurno && !isPedido;
     }
@@ -275,7 +292,7 @@ export default function Auditoria() {
               const isExpanded = expandedId === log.id;
               const userName = log.User?.fullName || log.userRut;
 
-              const canExpand = log.tableAffected === "customer_orders" && log.action === "UPDATE_STATUS";
+              const canExpand = (log.tableAffected === "customer_orders" && log.action === "UPDATE_STATUS") || (log.action === "CLOSE_REGISTER");
 
               return (
                 <div
@@ -353,14 +370,18 @@ export default function Auditoria() {
                     )}
                   </div>
 
-                  {/* Detalle expandible (Formato Boleta) */}
+                  {/* Detalle expandible (Formato Boleta / Cierre de Turno) */}
                   {isExpanded && canExpand && (
                     <div style={{
                       marginTop: 14, paddingTop: 14,
                       borderTop: "1px dashed var(--border)",
                       animation: "fadein 0.2s ease",
                     }}>
-                      <OrderTicket log={log} primary={primary} />
+                      {log.action === "CLOSE_REGISTER" ? (
+                        <ShiftReportTicket log={log} primary={primary} />
+                      ) : (
+                        <OrderTicket log={log} primary={primary} onSelectBoleta={(order) => setSelectedInvoice(order)} />
+                      )}
                     </div>
                   )}
                 </div>
@@ -369,6 +390,9 @@ export default function Auditoria() {
           </div>
         )}
       </div>
+      {selectedInvoice && (
+        <Boleta order={selectedInvoice} onClose={() => setSelectedInvoice(null)} />
+      )}
     </div>
   );
 }
@@ -396,7 +420,7 @@ function FilterChip({ label, active, onClick, primary }) {
   );
 }
 
-function OrderTicket({ log, primary }) {
+function OrderTicket({ log, primary, onSelectBoleta }) {
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -513,8 +537,301 @@ function OrderTicket({ log, primary }) {
             <span style={{ color: "var(--text)" }}>TOTAL</span>
             <span style={{ color: primary }}>${Number(order.totalAmount).toLocaleString("es-CL")}</span>
           </div>
+
+          <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                const printWindow = window.open('', '_blank', 'width=600,height=600');
+                const itemsHtml = order.OrderItems?.map(item => `
+                  <div class="flex" style="margin-bottom: 6px;">
+                    <span>${item.quantity}x ${item.productNameSnapshot}</span>
+                    <span>$${(Number(item.unitPrice) * item.quantity).toLocaleString("es-CL")}</span>
+                  </div>
+                `).join('') || '';
+
+                printWindow.document.write(`
+                  <html>
+                    <head>
+                      <title>Ticket de Pedido</title>
+                      <style>
+                        body { font-family: monospace; padding: 20px; color: #000; }
+                        div { line-height: 1.4; }
+                        hr { border: none; border-top: 1px dashed #000; margin: 10px 0; }
+                        .title { text-align: center; margin-bottom: 20px; }
+                        .flex { display: flex; justify-content: space-between; }
+                        .bold { font-weight: bold; }
+                      </style>
+                    </head>
+                    <body>
+                      <div class="title">
+                        <h3>FlashOrder</h3>
+                        <p>TICKET DE PEDIDO</p>
+                      </div>
+                      <hr />
+                      <div class="flex"><span>Identificador:</span> <span class="bold">${getOrderLabel(log).replace("pedido ", "").toUpperCase()}</span></div>
+                      \${order.Customer ? \`
+                        <div class="flex"><span>Cliente:</span> <span>\${order.Customer.fullName}</span></div>
+                        <div class="flex"><span>Teléfono:</span> <span>\${order.Customer.phone || "N/A"}</span></div>
+                      \` : ''}
+                      <hr />
+                      <div class="bold" style="margin-bottom: 8px;">DETALLE:</div>
+                      \${itemsHtml}
+                      <hr />
+                      <div class="flex bold" style="font-size: 15px;">
+                        <span>TOTAL</span>
+                        <span>$ \${Number(order.totalAmount).toLocaleString("es-CL")}</span>
+                      </div>
+                      <script>
+                        window.onload = function() {
+                          window.print();
+                          window.close();
+                        }
+                      </script>
+                    </body>
+                  </html>
+                `);
+                printWindow.document.close();
+              }}
+              style={{
+                flex: 1, padding: "10px 14px", borderRadius: 8, border: `1px solid ${primary}`,
+                background: "transparent", color: primary, fontSize: 12, fontWeight: 600,
+                cursor: "pointer", fontFamily: "'DM Sans', sans-serif", display: "inline-flex",
+                alignItems: "center", justifyContent: "center", gap: 6
+              }}
+            >
+              <i className="ti ti-printer" /> Imprimir Ticket
+            </button>
+
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onSelectBoleta(order);
+              }}
+              style={{
+                flex: 1, padding: "10px 14px", borderRadius: 8, border: "none",
+                background: `linear-gradient(135deg, ${primary}, ${primary}dd)`,
+                color: "#fff", fontSize: 12, fontWeight: 600,
+                cursor: "pointer", fontFamily: "'DM Sans', sans-serif", display: "inline-flex",
+                alignItems: "center", justifyContent: "center", gap: 6
+              }}
+            >
+              <i className="ti ti-receipt" /> Ver Boleta
+            </button>
+          </div>
         </>
       )}
+    </div>
+  );
+}
+
+function ShiftReportTicket({ log, primary }) {
+  const [session, setSession] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    async function fetchSessionDetails() {
+      try {
+        setLoading(true);
+        if (!log.recordId) throw new Error("ID de turno no disponible");
+        const res = await apiFetch(`/api/cash-register/sessions/${log.recordId}`);
+        if (!res.ok) throw new Error("No se pudo cargar el detalle del turno");
+        const data = await res.json();
+        setSession(data);
+      } catch (err) {
+        setError(err.message);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchSessionDetails();
+  }, [log.recordId]);
+
+  const fmtVal = (n) => `$${Number(n || 0).toLocaleString("es-CL")}`;
+
+  if (loading) {
+    return (
+      <div style={{ textAlign: "center", padding: "20px", color: "var(--text2)", fontSize: 13 }}>
+        <div style={{
+          width: 20, height: 20, border: "2px solid var(--border)",
+          borderTopColor: primary, borderRadius: "50%",
+          animation: "spin 0.8s linear infinite",
+          margin: "0 auto 8px"
+        }} />
+        Cargando detalles de turno...
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div style={{ textAlign: "center", padding: "20px", color: "#ef4444", fontSize: 13 }}>
+        <i className="ti ti-alert-circle" style={{ fontSize: 24, display: "block", marginBottom: 8 }} />
+        {error}
+      </div>
+    );
+  }
+
+  const diff = Number(session.difference) || 0;
+  const expected = Number(session.expectedCash) || 0;
+  const opening = Number(session.openingCash) || 0;
+  const closing = Number(session.closingCash) || 0;
+
+  return (
+    <div style={{
+      background: "var(--bg)", 
+      padding: 20, 
+      borderRadius: 12, 
+      border: "1px solid var(--border)",
+      maxWidth: 400,
+      margin: "0 auto",
+      boxShadow: "0 4px 6px rgba(0,0,0,0.05)"
+    }}>
+      <div style={{ textAlign: "center", marginBottom: 15 }}>
+        <p style={{ margin: "4px 0 0", fontSize: 12, color: "var(--text2)", textTransform: "uppercase", letterSpacing: 1 }}>
+          Resumen de Cierre de Turno
+        </p>
+      </div>
+
+      <div style={{ 
+        borderTop: "1px dashed var(--border)", 
+        borderBottom: "1px dashed var(--border)", 
+        padding: "12px 0", 
+        marginBottom: 12, 
+        fontSize: 13,
+        fontFamily: "'DM Mono', 'Fira Code', monospace"
+      }}>
+        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+          <span style={{ color: "var(--text2)" }}>Monto Inicio:</span>
+          <strong style={{ color: "var(--text)" }}>{fmtVal(opening)}</strong>
+        </div>
+        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+          <span style={{ color: "var(--text2)" }}>Efectivo Esperado:</span>
+          <strong style={{ color: "var(--text)" }}>{fmtVal(expected)}</strong>
+        </div>
+        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+          <span style={{ color: "var(--text2)" }}>Monto Cierre (Real):</span>
+          <strong style={{ color: "var(--text)" }}>{fmtVal(closing)}</strong>
+        </div>
+        <div style={{ 
+          display: "flex", 
+          justifyContent: "space-between", 
+          marginTop: 6,
+          paddingTop: 6,
+          borderTop: "1px solid var(--border)",
+          color: diff === 0 ? "#15803d" : diff > 0 ? "#1d4ed8" : "#dc2626"
+        }}>
+          <span style={{ fontWeight: 600 }}>Diferencia:</span>
+          <strong style={{ fontWeight: 700 }}>
+            {diff === 0 ? "✓ Cuadre" : diff > 0 ? `+${fmtVal(diff)}` : fmtVal(diff)}
+          </strong>
+        </div>
+      </div>
+
+      <div style={{ 
+        marginBottom: 12, 
+        fontSize: 13,
+        fontFamily: "'DM Mono', 'Fira Code', monospace"
+      }}>
+        <div style={{ fontWeight: 600, color: "var(--text2)", marginBottom: 8, textTransform: "uppercase", fontSize: 11, letterSpacing: 0.5 }}>
+          Desglose de Ventas del Turno
+        </div>
+        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+          <span style={{ color: "var(--text)" }}>Efectivo</span>
+          <span style={{ color: "var(--text)" }}>{fmtVal(session.breakdown?.efectivo)}</span>
+        </div>
+        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+          <span style={{ color: "var(--text)" }}>Transferencia</span>
+          <span style={{ color: "var(--text)" }}>{fmtVal(session.breakdown?.transferencia)}</span>
+        </div>
+        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+          <span style={{ color: "var(--text)" }}>Tarjeta</span>
+          <span style={{ color: "var(--text)" }}>{fmtVal(session.breakdown?.tarjeta)}</span>
+        </div>
+        <div style={{ 
+          borderTop: "1px solid var(--border)", 
+          paddingTop: 6, 
+          marginTop: 6,
+          display: "flex", 
+          justifyContent: "space-between",
+          fontWeight: 700
+        }}>
+          <span style={{ color: "var(--text)" }}>Total Ventas</span>
+          <span style={{ color: primary }}>{fmtVal(session.breakdown?.totalSales)}</span>
+        </div>
+      </div>
+
+      {session.notes && (
+        <div style={{
+          fontSize: 11, color: "var(--text2)", fontStyle: "italic",
+          paddingTop: 8, borderTop: "1px dashed var(--border)",
+          wordBreak: "break-word", marginBottom: 12
+        }}>
+          📝 Obs: {session.notes}
+        </div>
+      )}
+
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          const printWindow = window.open('', '_blank', 'width=600,height=600');
+          printWindow.document.write(`
+            <html>
+              <head>
+                <title>Resumen de Cierre de Caja</title>
+                <style>
+                  body { font-family: monospace; padding: 20px; color: #000; }
+                  div { line-height: 1.4; }
+                  hr { border: none; border-top: 1px dashed #000; margin: 10px 0; }
+                  .title { text-align: center; margin-bottom: 20px; }
+                  .flex { display: flex; justify-content: space-between; }
+                  .bold { font-weight: bold; }
+                </style>
+              </head>
+              <body>
+                <div class="title">
+                  <h3>FlashOrder</h3>
+                  <p>RESUMEN DE CIERRE DE CAJA</p>
+                </div>
+                <hr />
+                <div class="flex"><span>Monto Inicial:</span> <span class="bold">${fmtVal(opening)}</span></div>
+                <div class="flex"><span>Efectivo Esperado:</span> <span class="bold">${fmtVal(expected)}</span></div>
+                <div class="flex"><span>Efectivo Contado (Real):</span> <span class="bold">${fmtVal(closing)}</span></div>
+                <hr />
+                <div class="flex bold">
+                  <span>Diferencia:</span>
+                  <span>${diff === 0 ? "Cuadre" : diff > 0 ? `+${fmtVal(diff)}` : fmtVal(diff)}</span>
+                </div>
+                <hr />
+                <div class="bold" style="margin-bottom: 5px;">DESGLOSE VENTAS DEL TURNO:</div>
+                <div class="flex"><span>Efectivo:</span> <span>${fmtVal(session.breakdown?.efectivo)}</span></div>
+                <div class="flex"><span>Transferencia:</span> <span>${fmtVal(session.breakdown?.transferencia)}</span></div>
+                <div class="flex"><span>Tarjeta:</span> <span>${fmtVal(session.breakdown?.tarjeta)}</span></div>
+                <hr />
+                <div class="flex bold"><span>Total Ventas:</span> <span>${fmtVal(session.breakdown?.totalSales)}</span></div>
+                \${session.notes ? \`<hr /><div>Obs: \${session.notes}</div>\` : ''}
+                <script>
+                  window.onload = function() {
+                    window.print();
+                    window.close();
+                  }
+                </script>
+              </body>
+            </html>
+          `);
+          printWindow.document.close();
+        }}
+        style={{
+          width: "100%", marginTop: 14, padding: "10px 14px", borderRadius: 8, border: `1px solid ${primary}`,
+          background: "transparent", color: primary, fontSize: 12, fontWeight: 600,
+          cursor: "pointer", fontFamily: "'DM Sans', sans-serif", display: "inline-flex",
+          alignItems: "center", justifyContent: "center", gap: 6
+        }}
+      >
+        <i className="ti ti-printer" /> Imprimir Resumen
+      </button>
     </div>
   );
 }
