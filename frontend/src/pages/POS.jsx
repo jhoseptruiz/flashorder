@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
+import { useCashRegister } from "../context/CashRegisterContext";
 import { apiFetch } from "../utils/apiFetch";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -24,6 +25,7 @@ function calendarDays(year, month) {
 export default function POS() {
   const { user } = useAuth();
   const { primary, showToast, appName, appLogo } = useTheme();
+  const { activeSession, refreshSession } = useCashRegister();
 
   // Catálogo
   const [categories, setCategories]     = useState([]);
@@ -62,6 +64,7 @@ export default function POS() {
 
   // Modal checkout
   const [showCheckout, setShowCheckout] = useState(false);
+  const [cashReceived, setCashReceived] = useState("");
 
   // ── Cargar catálogo ─────────────────────────────────────────────────────────
   useEffect(() => {
@@ -115,6 +118,14 @@ export default function POS() {
 
   // Total del carrito
   const cartTotal = useMemo(() => cart.reduce((s, i) => s + i.subtotal, 0), [cart]);
+
+  const actualDeposit = useMemo(() => {
+    return deposit !== "" ? (parseInt(deposit) || 0) : cartTotal;
+  }, [deposit, cartTotal]);
+
+  const changeAmount = useMemo(() => {
+    return paymentMethod === "efectivo" && cashReceived !== "" ? Math.max(0, (parseInt(cashReceived) || 0) - actualDeposit) : 0;
+  }, [paymentMethod, cashReceived, actualDeposit]);
 
   // ── Abrir modal de producto ─────────────────────────────────────────────────
   const openProduct = async (product) => {
@@ -296,9 +307,11 @@ export default function POS() {
           groupId: item.groupId,
         })),
         deliveryDate: deliveryDate ? deliveryDate.toISOString() : null,
-        depositAmount: parseInt(deposit) || 0,
+        depositAmount: actualDeposit,
         paymentMethod,
         notes: "",
+        cashReceived: paymentMethod === "efectivo" ? (parseInt(cashReceived) || 0) : 0,
+        cashChange: paymentMethod === "efectivo" ? Math.max(0, (parseInt(cashReceived) || 0) - actualDeposit) : 0,
         companyName: appName,
         companyLogo: appLogo,
       };
@@ -320,7 +333,10 @@ export default function POS() {
       setCustomerEmail("");
       setSelectedDay(null);
       setDeposit("");
+      setCashReceived("");
       setShowCheckout(false);
+      // Refrescar estado de caja tras crear pedido
+      refreshSession();
     } catch (e) {
       showToast(e.message, "error");
     } finally {
@@ -330,7 +346,7 @@ export default function POS() {
 
   // ── Estilos locales ─────────────────────────────────────────────────────────
   const S = {
-    layout:    { display: "flex", gap: 0, height: "100%", animation: "fadein 0.3s ease" },
+    layout:    { display: "flex", gap: 0, height: "100%", animation: "fadein 0.3s ease", position: "relative" },
     catalog:   { flex: "1 1 60%", overflow: "auto", paddingRight: 20 },
     sidebar:   { flex: "0 0 340px", background: "var(--surface)", borderLeft: "1px solid var(--border)", borderRadius: 14, padding: 20, overflow: "auto", display: "flex", flexDirection: "column", gap: 14 },
     tabs:      { display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 },
@@ -348,8 +364,38 @@ export default function POS() {
   };
 
   // ── RENDER ──────────────────────────────────────────────────────────────────
+  const cajaAbierta = !!activeSession;
+
   return (
     <div style={S.layout} className="pos-layout">
+      {/* ═══ BLOQUEO SI CAJA CERRADA ═══ */}
+      {!cajaAbierta && (
+        <div style={{
+          position: "absolute", inset: 0, zIndex: 10, display: "flex",
+          alignItems: "center", justifyContent: "center",
+          background: "rgba(15, 23, 42, 0.6)", backdropFilter: "blur(6px)",
+          borderRadius: 14,
+        }}>
+          <div style={{
+            background: "var(--surface)", border: "1px solid var(--border)",
+            borderRadius: 16, padding: "36px 40px", textAlign: "center",
+            boxShadow: "0 28px 80px rgba(15, 23, 42, 0.32)",
+            maxWidth: 380, animation: "fadein 0.3s ease",
+          }}>
+            <div style={{
+              width: 56, height: 56, borderRadius: 14,
+              background: "linear-gradient(135deg, #dc2626, #f97316)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              margin: "0 auto 16px",
+            }}>
+              <i className="ti ti-lock" style={{ fontSize: 28, color: "#fff" }} />
+            </div>
+            <h2 style={{ fontSize: 20, fontWeight: 700, color: "var(--text)", margin: "0 0 8px", fontFamily: "Syne, sans-serif" }}>Caja Cerrada</h2>
+            <p style={{ fontSize: 13, color: "var(--text2)", margin: "0 0 4px" }}>Debes abrir la caja desde el panel lateral para comenzar a registrar pedidos.</p>
+          </div>
+        </div>
+      )}
+
       {/* ═══ PANEL IZQUIERDO — CATÁLOGO ═══ */}
       <div style={S.catalog}>
         <h1 style={{ fontFamily: "Syne, sans-serif", fontSize: 24, fontWeight: 700, color: "var(--text)", marginBottom: 16, letterSpacing: "-0.3px" }}>
@@ -463,7 +509,7 @@ export default function POS() {
             <input
               className="input-field"
               type="number"
-              placeholder="$ 0"
+              placeholder={fmt(cartTotal)}
               value={deposit}
               onChange={(e) => setDeposit(e.target.value)}
               style={{ flex: 1, padding: "6px 10px" }}
@@ -479,6 +525,35 @@ export default function POS() {
               <option value="tarjeta">Tarjeta</option>
             </select>
           </div>
+
+          {/* Calculadora de vuelto (solo efectivo) */}
+          {paymentMethod === "efectivo" && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}>
+                <span style={{ color: "var(--text2)", fontWeight: 600, whiteSpace: "nowrap" }}>Paga con</span>
+                <input
+                  className="input-field"
+                  type="number"
+                  placeholder="$ 0"
+                  value={cashReceived}
+                  onChange={(e) => setCashReceived(e.target.value)}
+                  style={{ flex: 1, padding: "6px 10px" }}
+                  min="0"
+                />
+              </div>
+              {cashReceived !== "" && (
+                <div style={{
+                  display: "flex", justifyContent: "space-between", alignItems: "center",
+                  padding: "8px 12px", borderRadius: 8,
+                  background: changeAmount >= 0 ? "#dcfce7" : "#fee2e2",
+                  border: `1px solid ${changeAmount >= 0 ? "#86efac" : "#fca5a5"}`,
+                }}>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: changeAmount >= 0 ? "#15803d" : "#dc2626" }}>Vuelto:</span>
+                  <span style={{ fontSize: 15, fontWeight: 800, color: changeAmount >= 0 ? "#15803d" : "#dc2626" }}>{fmt(changeAmount)}</span>
+                </div>
+              )}
+            </div>
+          )}
 
           <button
             style={S.btnPrimary(submitting || cart.length === 0)}
@@ -725,7 +800,7 @@ export default function POS() {
                 <div style={{ display: "flex", flexDirection: "column", gap: 8, fontSize: 13 }}>
                   <div style={{ display: "flex", justifyContent: "space-between" }}>
                     <span style={{ color: "var(--text2)", fontWeight: 600 }}>Abono:</span>
-                    <span style={{ color: "var(--text)" }}>{fmt(deposit || 0)}</span>
+                    <span style={{ color: "var(--text)" }}>{fmt(actualDeposit)}</span>
                   </div>
                   <div style={{ display: "flex", justifyContent: "space-between", fontSize: 16, fontWeight: 700 }}>
                     <span>Total:</span>

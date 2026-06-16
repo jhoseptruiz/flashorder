@@ -8,6 +8,8 @@ import CustomerOrder from "./CustomerOrder.js";
 import OrderItem from "./OrderItem.js";
 import AuditLog from "./AuditLog.js";
 import SystemConfig from "./SystemConfig.js";
+import CashRegisterSession from "./CashRegisterSession.js";
+import CashRegisterTransaction from "./CashRegisterTransaction.js";
 
 // ==========================================
 // CATÁLOGO Y REGLAS DE COMPOSICIÓN
@@ -56,6 +58,30 @@ ProductVariant.hasMany(OrderItem, { foreignKey: 'variantId' });
 OrderItem.belongsTo(ProductVariant, { foreignKey: 'variantId' });
 
 // ==========================================
+// CAJA REGISTRADORA
+// ==========================================
+
+// Users "abre" CashRegisterSessions
+User.hasMany(CashRegisterSession, { foreignKey: 'openedByRut', sourceKey: 'rut', as: 'OpenedSessions' });
+CashRegisterSession.belongsTo(User, { foreignKey: 'openedByRut', targetKey: 'rut', as: 'OpenedBy' });
+
+// Users "cierra" CashRegisterSessions
+User.hasMany(CashRegisterSession, { foreignKey: 'closedByRut', sourceKey: 'rut', as: 'ClosedSessions' });
+CashRegisterSession.belongsTo(User, { foreignKey: 'closedByRut', targetKey: 'rut', as: 'ClosedBy' });
+
+// CashRegisterSessions "contiene" CashRegisterTransactions
+CashRegisterSession.hasMany(CashRegisterTransaction, { foreignKey: 'sessionId', as: 'Transactions' });
+CashRegisterTransaction.belongsTo(CashRegisterSession, { foreignKey: 'sessionId' });
+
+// CashRegisterTransactions "vinculada a" CustomerOrders (opcional)
+CustomerOrder.hasMany(CashRegisterTransaction, { foreignKey: 'orderId', as: 'CashTransactions' });
+CashRegisterTransaction.belongsTo(CustomerOrder, { foreignKey: 'orderId' });
+
+// CustomerOrders "vinculada a" CashRegisterSession
+CashRegisterSession.hasMany(CustomerOrder, { foreignKey: 'cashRegisterSessionId', as: 'Orders' });
+CustomerOrder.belongsTo(CashRegisterSession, { foreignKey: 'cashRegisterSessionId' });
+
+// ==========================================
 // AUDITORÍA
 // ==========================================
 
@@ -73,5 +99,7 @@ export {
   CustomerOrder,
   OrderItem,
   AuditLog,
-  SystemConfig
+  SystemConfig,
+  CashRegisterSession,
+  CashRegisterTransaction
 };

@@ -55,6 +55,9 @@ async function setupAPI() {
     await addColumnIfNotExists("customer_orders", "payment_method", "VARCHAR(120)", "NULL");
     await addColumnIfNotExists("customer_orders", "company_name", "VARCHAR(255)", "NULL");
     await addColumnIfNotExists("customer_orders", "company_logo", "TEXT", "NULL");
+    await addColumnIfNotExists("customer_orders", "cash_received", "BIGINT", 0);
+    await addColumnIfNotExists("customer_orders", "cash_change", "BIGINT", 0);
+    await addColumnIfNotExists("customer_orders", "cash_register_session_id", "UUID", "NULL");
 
     await sequelize.sync();
     console.log("=> Modelos sincronizados con la base de datos");

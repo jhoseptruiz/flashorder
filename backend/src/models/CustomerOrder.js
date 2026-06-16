@@ -47,7 +47,17 @@ const CustomerOrder = sequelize.define("CustomerOrder", {
   },
   notes: {
     type: DataTypes.TEXT,
-  }
+  },
+  cashReceived: {
+    type: DataTypes.BIGINT,
+    allowNull: true,
+    defaultValue: 0,
+  },
+  cashChange: {
+    type: DataTypes.BIGINT,
+    allowNull: true,
+    defaultValue: 0,
+  },
 }, {
   tableName: "customer_orders",
 });

@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useTheme } from "../context/ThemeContext";
 import { useAuth } from "../context/AuthContext";
+import { useCashRegister } from "../context/CashRegisterContext";
 import { apiFetch } from "../utils/apiFetch";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -27,12 +28,14 @@ const formatTime = (date) =>
 export default function Pedidos() {
   const { primary, showToast } = useTheme();
   const { user } = useAuth();
+  const { refreshSession } = useCashRegister();
 
   // ── Estado ────────────────────────────────────────────────────────────────
   const [uberOrders,    setUberOrders]    = useState([]);
   const [activeOrders,  setActiveOrders]  = useState([]);
   const [loading,       setLoading]       = useState(true);
   const [updatingId,    setUpdatingId]    = useState(null);
+  const [deliveryConfirm, setDeliveryConfirm] = useState(null); // { order, pendingAmount }
 
   // Calendario (igual que Cocina)
   const [currentDate,   setCurrentDate]   = useState(new Date());
@@ -93,7 +96,18 @@ export default function Pedidos() {
 
   // ── Cambio de estado de un pedido ────────────────────────────────────────
 
-  const handleStatusChange = async (orderId, newStatus) => {
+  const handleStatusChange = async (orderId, newStatus, skipConfirm = false) => {
+    // Intercepción: si se marca como entregado y tiene saldo en efectivo, confirmar
+    if (newStatus === "entregado" && !skipConfirm) {
+      const order = [...activeOrders, ...uberOrders].find(o => o.id === orderId);
+      if (order && order.paymentMethod === "efectivo") {
+        const pending = Number(order.totalAmount || 0) - Number(order.depositAmount || 0);
+        if (pending > 0) {
+          setDeliveryConfirm({ order, pendingAmount: pending });
+          return;
+        }
+      }
+    }
     setUpdatingId(orderId);
     try {
       const res = await apiFetch(`/api/orders/${orderId}/status`, {
@@ -111,6 +125,8 @@ export default function Pedidos() {
       setActiveOrders((prev) => update(prev).filter((o) => o.status !== "entregado"));
 
       showToast(`Pedido marcado como ${getStatusLabel(newStatus)}`, "success");
+      // Refrescar caja si fue entrega con efectivo
+      refreshSession();
     } catch (err) {
       showToast(err.message, "error");
     } finally {
@@ -530,6 +546,95 @@ export default function Pedidos() {
           to   { opacity: 1; }
         }
       `}</style>
+
+      {/* ═══ MODAL CONFIRMACIÓN DE ENTREGA ═══ */}
+      {deliveryConfirm && (
+        <div
+          style={{
+            position: "fixed", inset: 0, background: "rgba(15, 23, 42, 0.54)",
+            backdropFilter: "blur(4px)", display: "flex", alignItems: "center",
+            justifyContent: "center", zIndex: 100, padding: 20,
+            animation: "fadein 0.2s ease",
+          }}
+          onClick={() => setDeliveryConfirm(null)}
+        >
+          <div
+            style={{
+              background: "var(--surface)", border: "1px solid var(--border)",
+              borderRadius: 16, padding: 28, width: "min(420px, 100%)",
+              boxShadow: "0 28px 80px rgba(15, 23, 42, 0.32)", position: "relative",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button onClick={() => setDeliveryConfirm(null)} style={{ position: "absolute", top: 14, right: 14, border: "1px solid var(--border)", background: "transparent", color: "var(--text)", borderRadius: 999, width: 30, height: 30, display: "inline-flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
+              <i className="ti ti-x" />
+            </button>
+
+            <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
+              <div style={{ width: 44, height: 44, borderRadius: 12, background: "linear-gradient(135deg, #f59e0b, #f97316)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <i className="ti ti-alert-triangle" style={{ fontSize: 22, color: "#fff" }} />
+              </div>
+              <div>
+                <h2 style={{ fontSize: 18, fontWeight: 700, color: "var(--text)", margin: 0, fontFamily: "Syne, sans-serif" }}>Confirmar Entrega</h2>
+                <p style={{ fontSize: 12, color: "var(--text2)", margin: 0 }}>Pedido #{deliveryConfirm.order.id.substring(0, 8).toUpperCase()}</p>
+              </div>
+            </div>
+
+            <div style={{
+              background: "#fef3c7", border: "1px solid #fcd34d", borderRadius: 10,
+              padding: "14px 16px", marginBottom: 18,
+            }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: "#92400e", marginBottom: 6 }}>
+                <i className="ti ti-cash" style={{ marginRight: 6 }} />
+                Este pedido tiene un saldo pendiente en efectivo:
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 4 }}>
+                <span style={{ color: "#92400e" }}>Total del pedido:</span>
+                <span style={{ fontWeight: 700, color: "#78350f" }}>{formatCLP(deliveryConfirm.order.totalAmount)}</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 4 }}>
+                <span style={{ color: "#92400e" }}>Abono recibido:</span>
+                <span style={{ fontWeight: 700, color: "#78350f" }}>{formatCLP(deliveryConfirm.order.depositAmount)}</span>
+              </div>
+              <div style={{ borderTop: "1px solid #fcd34d", paddingTop: 8, display: "flex", justifyContent: "space-between", fontSize: 16 }}>
+                <span style={{ fontWeight: 700, color: "#78350f" }}>Cobrar al entregar:</span>
+                <span style={{ fontWeight: 800, color: "#dc2626", fontSize: 18 }}>{formatCLP(deliveryConfirm.pendingAmount)}</span>
+              </div>
+            </div>
+
+            <p style={{ fontSize: 12, color: "var(--text2)", marginBottom: 18 }}>
+              Asegúrate de cobrar el saldo pendiente antes de marcar como entregado. El monto se registrará automáticamente en la caja.
+            </p>
+
+            <div style={{ display: "flex", gap: 10 }}>
+              <button
+                onClick={() => setDeliveryConfirm(null)}
+                style={{
+                  flex: 1, padding: "12px 16px", borderRadius: 8, border: "1px solid var(--border)",
+                  background: "transparent", color: "var(--text)", fontSize: 13, fontWeight: 600,
+                  cursor: "pointer", fontFamily: "'DM Sans', sans-serif",
+                }}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => {
+                  const orderId = deliveryConfirm.order.id;
+                  setDeliveryConfirm(null);
+                  handleStatusChange(orderId, "entregado", true);
+                }}
+                style={{
+                  flex: 1, padding: "12px 16px", borderRadius: 8, border: "none",
+                  background: "#10b981", color: "#fff", fontSize: 13, fontWeight: 700,
+                  cursor: "pointer", fontFamily: "'DM Sans', sans-serif",
+                }}
+              >
+                <i className="ti ti-check" style={{ marginRight: 4 }} /> Confirmar Entrega
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

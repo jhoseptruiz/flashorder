@@ -82,6 +82,29 @@ export async function updateOrderStatus(orderId, newStatus) {
     order.status = newStatus;
     await order.save();
 
+    // Registrar ingreso de saldo en caja al entregar un pedido
+    if (newStatus === "entregado") {
+      const pendingAmount = Number(order.totalAmount || 0) - Number(order.depositAmount || 0);
+      if (pendingAmount > 0) {
+        try {
+          const { getActiveSession, registerTransaction } = await import("./cashRegister.service.js");
+          const session = await getActiveSession();
+          if (session) {
+            const methodLabel = order.paymentMethod === "efectivo" ? "Saldo" : order.paymentMethod === "transferencia" ? "Saldo Transferencia" : "Saldo Tarjeta";
+            await registerTransaction(
+              session.id,
+              "income",
+              pendingAmount,
+              `${methodLabel} Pedido #${orderId.substring(0, 8).toUpperCase()}`,
+              orderId
+            );
+          }
+        } catch (e) {
+          console.error("Error registrando saldo en caja:", e);
+        }
+      }
+    }
+
     return order;
   } catch (error) {
     console.error("Error en updateOrderStatus:", error);

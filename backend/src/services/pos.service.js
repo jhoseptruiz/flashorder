@@ -5,6 +5,7 @@ import CustomerOrder from "../models/CustomerOrder.js";
 import OrderItem from "../models/OrderItem.js";
 import { Category, CompositionRule, Product, ProductVariant } from "../models/index.models.js";
 import { sendReceiptEmail } from "./email.service.js";
+import { getActiveSession, registerTransaction } from "./cashRegister.service.js";
 
 // ── Crear pedido desde el POS ─────────────────────────────────────────────────
 export async function createOrder({
@@ -17,6 +18,8 @@ export async function createOrder({
   companyName,
   companyLogo,
   createdByRut,
+  cashReceived = 0,
+  cashChange = 0,
 }) {
   const transaction = await sequelize.transaction();
 
@@ -46,7 +49,34 @@ export async function createOrder({
       return sum + item.quantity * item.unitPrice;
     }, 0);
 
-    // 5. Crear la orden
+    // Calcular montos de efectivo finales
+    let finalCashReceived = 0;
+    let finalCashChange = 0;
+    if (paymentMethod === "efectivo") {
+      const dep = depositAmount || 0;
+      const rec = cashReceived || 0;
+      if (rec <= 0 || rec < dep) {
+        finalCashReceived = dep;
+        finalCashChange = 0;
+      } else {
+        finalCashReceived = rec;
+        finalCashChange = rec - dep;
+      }
+    }
+
+    // 5. Buscar sesión de caja activa (si es efectivo, es obligatoria)
+    let activeSession = null;
+    try {
+      activeSession = await getActiveSession();
+    } catch (e) {
+      // Si falla, no bloquear
+    }
+
+    if (paymentMethod === "efectivo" && !activeSession) {
+      throw new Error("Debes abrir la caja antes de registrar un pedido con pago en efectivo.");
+    }
+
+    // 6. Crear la orden
     const order = await CustomerOrder.create(
       {
         customerId: newCustomer.id,
@@ -61,11 +91,14 @@ export async function createOrder({
         source: "local",
         status: "pendiente",
         notes: notes || null,
+        cashReceived: finalCashReceived,
+        cashChange: finalCashChange,
+        cashRegisterSessionId: activeSession ? activeSession.id : null,
       },
       { transaction }
     );
 
-    // 6. Crear los items del pedido
+    // 7. Crear los items del pedido
     const orderItems = items.map((item) => ({
       orderId: order.id,
       variantId: item.variantId || null,
@@ -80,6 +113,38 @@ export async function createOrder({
 
     await transaction.commit();
 
+    // 8. Registrar transacción de caja (ingreso del abono / pago)
+    if (activeSession && depositAmount > 0) {
+      try {
+        const transAmount = paymentMethod === "efectivo" ? finalCashReceived : depositAmount;
+        const methodLabel = paymentMethod === "efectivo" ? "Abono" : paymentMethod === "transferencia" ? "Transferencia" : "Tarjeta";
+        await registerTransaction(
+          activeSession.id,
+          "income",
+          transAmount,
+          `${methodLabel} Pedido #${order.id.substring(0, 8).toUpperCase()}`,
+          order.id
+        );
+      } catch (e) {
+        console.error("Error registrando transacción de caja:", e);
+      }
+    }
+
+    // 8b. Registrar egreso de vuelto en caja
+    if (paymentMethod === "efectivo" && activeSession && finalCashChange > 0) {
+      try {
+        await registerTransaction(
+          activeSession.id,
+          "expense",
+          finalCashChange,
+          `Vuelto Pedido #${order.id.substring(0, 8).toUpperCase()}`,
+          order.id
+        );
+      } catch (e) {
+        console.error("Error registrando vuelto en caja:", e);
+      }
+    }
+
     // Enviar boleta por correo sin bloquear la respuesta
     void sendReceiptEmail({
       ...order.get({ plain: true }),
@@ -93,7 +158,7 @@ export async function createOrder({
       console.error("Error al enviar boleta por correo:", error);
     });
 
-    // 7. Retornar la orden completa
+    // 9. Retornar la orden completa
     const fullOrder = await CustomerOrder.findByPk(order.id, {
       include: [
         {

@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { ThemeProvider, useTheme } from "./context/ThemeContext";
 import { AuthProvider } from "./context/AuthContext";
+import { CashRegisterProvider } from "./context/CashRegisterContext";
 import ProtectedRoute from "./components/ProtectedRoute";
 import Login from "./pages/Login";
 import Layout from "./components/Layout";
@@ -80,9 +81,11 @@ export default function App() {
   return (
     <ThemeProvider>
       <AuthProvider>
-        <BrowserRouter>
-          <AppContent />
-        </BrowserRouter>
+        <CashRegisterProvider>
+          <BrowserRouter>
+            <AppContent />
+          </BrowserRouter>
+        </CashRegisterProvider>
       </AuthProvider>
     </ThemeProvider>
   );
