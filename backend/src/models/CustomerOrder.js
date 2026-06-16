@@ -27,6 +27,17 @@ const CustomerOrder = sequelize.define("CustomerOrder", {
     type: DataTypes.ENUM('local', 'uber_eats'),
     allowNull: false,
   },
+  companyName: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
+  companyLogo: {
+    type: DataTypes.TEXT,
+    allowNull: true,
+  },
+  paymentMethod: {
+    type: DataTypes.STRING,
+  },
   externalOrderId: {
     type: DataTypes.STRING,
   },

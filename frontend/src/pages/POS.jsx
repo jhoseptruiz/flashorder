@@ -23,7 +23,7 @@ function calendarDays(year, month) {
 // ── Componente Principal ──────────────────────────────────────────────────────
 export default function POS() {
   const { user } = useAuth();
-  const { primary, showToast } = useTheme();
+  const { primary, showToast, appName, appLogo } = useTheme();
 
   // Catálogo
   const [categories, setCategories]     = useState([]);
@@ -299,6 +299,8 @@ export default function POS() {
         depositAmount: parseInt(deposit) || 0,
         paymentMethod,
         notes: "",
+        companyName: appName,
+        companyLogo: appLogo,
       };
 
       const res = await apiFetch("/api/pos/orders", {

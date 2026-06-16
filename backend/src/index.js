@@ -18,8 +18,8 @@ async function setupServer() {
     const allowedOrigin = process.env.FRONTEND_URL;
     app.use(cors({ credentials: true, origin: allowedOrigin }));
     console.log(`=> CORS configurado para: ${allowedOrigin}`);
-    app.use(express.urlencoded({ extended: true, limit: "1mb" }));
-    app.use(express.json({ limit: "1mb" }));
+    app.use(express.urlencoded({ extended: true, limit: "10mb" }));
+    app.use(express.json({ limit: "10mb" }));
     app.use(cookieParser());
     app.use(morgan("dev"));
 
@@ -52,6 +52,9 @@ async function setupAPI() {
     await addColumnIfNotExists("categories", "min_items", "INTEGER", 0);
     await addColumnIfNotExists("categories", "max_items", "INTEGER", "NULL");
     await addColumnIfNotExists("products", "related_category_id", "UUID", "NULL");
+    await addColumnIfNotExists("customer_orders", "payment_method", "VARCHAR(120)", "NULL");
+    await addColumnIfNotExists("customer_orders", "company_name", "VARCHAR(255)", "NULL");
+    await addColumnIfNotExists("customer_orders", "company_logo", "TEXT", "NULL");
 
     await sequelize.sync();
     console.log("=> Modelos sincronizados con la base de datos");
