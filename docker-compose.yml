@@ -52,6 +52,15 @@ services:
     networks:
       - flashorder_net
 
+  localtunnel:
+    image: node:20-alpine
+    container_name: flashorder_localtunnel
+    restart: unless-stopped
+    network_mode: host
+    command: npx -y localtunnel --port 3000 --subdomain rich-crabs-try
+    depends_on:
+      - backend
+
 volumes:
   postgres_data:
 
