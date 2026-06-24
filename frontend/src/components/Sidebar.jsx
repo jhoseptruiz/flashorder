@@ -33,6 +33,7 @@ export default function Sidebar({ isOpen = false, onClose = () => {} }) {
   const [closeNotes, setCloseNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [closeResult, setCloseResult] = useState(null);
+  const [pendingLogout, setPendingLogout] = useState(false);
 
   const showCashRegister = user?.role === "admin" || user?.role === "empleado";
   const isOpen_ = !!activeSession;
@@ -73,6 +74,17 @@ export default function Sidebar({ isOpen = false, onClose = () => {} }) {
       showToast(e.message, "error");
       setSubmitting(false);
     }
+  };
+
+  // ── Interceptar logout si la caja está abierta ─────────────────────────
+  const handleLogoutClick = () => {
+    if (showCashRegister && isOpen_) {
+      showToast("Debes cerrar la caja antes de cerrar sesión", "error");
+      setPendingLogout(true);
+      setShowCloseModal(true);
+      return;
+    }
+    logout();
   };
 
   const expectedCash = currentCash;
@@ -210,7 +222,7 @@ export default function Sidebar({ isOpen = false, onClose = () => {} }) {
               <div style={{ fontSize: 11, color: "var(--text2)" }}>{user?.role}</div>
             </div>
           </div>
-          <button className="nav-item danger" onClick={logout}>
+          <button className="nav-item danger" onClick={handleLogoutClick}>
             <i className="ti ti-logout" style={{ fontSize: 18 }} />
             Cerrar sesión
           </button>
@@ -290,7 +302,10 @@ export default function Sidebar({ isOpen = false, onClose = () => {} }) {
             animation: "fadein 0.2s ease",
           }}
           onClick={() => {
-            if (!closeResult) setShowCloseModal(false);
+            if (!closeResult) {
+              setShowCloseModal(false);
+              setPendingLogout(false);
+            }
           }}
         >
           <div
@@ -460,6 +475,10 @@ export default function Sidebar({ isOpen = false, onClose = () => {} }) {
                       setShowCloseModal(false);
                       setClosingCashInput("");
                       setCloseNotes("");
+                      if (pendingLogout) {
+                        setPendingLogout(false);
+                        logout();
+                      }
                     }}
                     style={{
                       flex: 1, padding: "12px 16px", borderRadius: 8, border: "none",
@@ -473,7 +492,7 @@ export default function Sidebar({ isOpen = false, onClose = () => {} }) {
               </div>
             ) : (
               <>
-                <button onClick={() => setShowCloseModal(false)} style={{ position: "absolute", top: 14, right: 14, border: "1px solid var(--border)", background: "transparent", color: "var(--text)", borderRadius: 999, width: 30, height: 30, display: "inline-flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
+                <button onClick={() => { setShowCloseModal(false); setPendingLogout(false); }} style={{ position: "absolute", top: 14, right: 14, border: "1px solid var(--border)", background: "transparent", color: "var(--text)", borderRadius: 999, width: 30, height: 30, display: "inline-flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
                   <i className="ti ti-x" />
                 </button>
 
