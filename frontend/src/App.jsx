@@ -48,7 +48,7 @@ function AppContent() {
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
           
           <Route element={<ProtectedRoute allowedRoles={["admin", "empleado"]} />}>
-            <Route path="/dashboard" element={<Home navKey="dashboard" />} />
+            <Route path="/dashboard" element={<Home />} />
             <Route path="/pos" element={<POS />} />
             <Route path="/invoices" element={<Invoices />} />
           </Route>

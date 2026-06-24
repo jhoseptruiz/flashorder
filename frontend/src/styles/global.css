@@ -285,3 +285,10 @@ body {
     justify-content: center;
   }
 }
+
+/* Dashboard responsive */
+@media (max-width: 820px) {
+  .dashboard-main-grid {
+    grid-template-columns: 1fr !important;
+  }
+}

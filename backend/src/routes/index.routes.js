@@ -11,6 +11,7 @@ import invoiceRoutes from "./invoice.routes.js";
 import auditLogsRoutes from "./auditLogs.routes.js";
 import cashRegisterRoutes from "./cashRegister.routes.js";
 import webhookRoutes from "./webhook.routes.js";
+import { getDashboardStatsController } from "../controllers/dashboard.controller.js";
 
 const router = Router();
 
@@ -30,9 +31,7 @@ router.use("/audit-logs", auditLogsRoutes);
 router.use("/cash-register", cashRegisterRoutes);
 router.use("/webhook", webhookRoutes);
 
-// Ejemplo de ruta protegida para el futuro (solo admin y empleado)
-router.get("/dashboard-stats", authenticate, authorizeRoles("admin", "empleado"), (req, res) => {
-  res.json({ message: "Stats del dashboard (ruta protegida)", user: req.user });
-});
+// Ruta protegida del dashboard (admin y empleado)
+router.get("/dashboard-stats", authenticate, authorizeRoles("admin", "empleado"), getDashboardStatsController);
 
-export default router;
+export default router;
