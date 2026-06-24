@@ -59,6 +59,7 @@ export function AuthProvider({ children }) {
   // ── Login ─────────────────────────────────────────────────────────────────
   const login = useCallback((userData) => {
     setUser(userData);
+    window.dispatchEvent(new Event("auth:login"));
   }, []);
 
   return (
