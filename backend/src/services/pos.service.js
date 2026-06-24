@@ -182,8 +182,8 @@ export async function createOrder({
 // ── Obtener reglas de composición para un producto compuesto ──────────────────
 export async function getCompositionRules(baseCategoryId, independentCategoryId) {
   try {
-    if (!baseCategoryId) {
-      throw new Error("baseCategoryId es requerido");
+    if (!independentCategoryId) {
+      throw new Error("independentCategoryId es requerido para productos compuestos");
     }
 
     // Estrategia: Buscar las categorías base/complemento cuyos productos

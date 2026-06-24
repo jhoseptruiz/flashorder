@@ -59,8 +59,8 @@ export async function getCompositionRulesController(req, res) {
   try {
     const { baseCategoryId, independentCategoryId } = req.query;
 
-    if (!baseCategoryId) {
-      return res.status(400).json({ error: "baseCategoryId es requerido" });
+    if (!independentCategoryId) {
+      return res.status(400).json({ error: "independentCategoryId es requerido" });
     }
 
     const rules = await getCompositionRules(baseCategoryId, independentCategoryId || null);

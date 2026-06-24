@@ -16,8 +16,8 @@
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
 
-// ── Margen de seguridad: renovar si quedan menos de 2 minutos ────────────────
-const REFRESH_MARGIN_MS = 2 * 60 * 1000;
+// ── Margen de seguridad: renovar si quedan menos de 5 minutos ────────────────
+const REFRESH_MARGIN_MS = 5 * 60 * 1000;
 
 // ── Intervalo de fondo: renovar cada 12 min para cubrir inactividad total ────
 const BACKGROUND_REFRESH_INTERVAL_MS = 12 * 60 * 1000;
@@ -47,7 +47,10 @@ function decodeJwtPayload(token) {
   try {
     const parts = token.split(".");
     if (parts.length !== 3) return null;
-    const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    let base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    while (base64.length % 4) {
+      base64 += "=";
+    }
     const json = atob(base64);
     return JSON.parse(json);
   } catch {

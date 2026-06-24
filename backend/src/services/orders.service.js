@@ -74,7 +74,7 @@ export async function updateOrderStatus(orderId, newStatus) {
       throw new Error("Orden no encontrada");
     }
 
-    const validStatuses = ["pendiente_uber", "pendiente", "en_cocina", "empacado", "entregado"];
+    const validStatuses = ["pendiente_uber", "pendiente", "en_cocina", "empacado", "entregado", "rechazado"];
     if (!validStatuses.includes(newStatus)) {
       throw new Error(`Estado inválido: ${newStatus}`);
     }
