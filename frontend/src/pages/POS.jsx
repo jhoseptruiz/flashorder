@@ -142,10 +142,10 @@ export default function POS() {
     }
 
     // Si es compuesto, cargar reglas de composición
-    if (product.isComposite && product.baseCategoryId) {
-      setLoadingRules(true);
+    if (product.isComposite) {
       try {
-        const res = await apiFetch(`/api/pos/composition-rules?baseCategoryId=${product.baseCategoryId}&independentCategoryId=${product.categoryId}`);
+        setLoadingRules(true);
+        const res = await apiFetch(`/api/pos/composition-rules?independentCategoryId=${product.categoryId}`);
         if (res.ok) {
           const data = await res.json();
           setCompositionRules(data);
