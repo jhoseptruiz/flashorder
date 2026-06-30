@@ -10,6 +10,8 @@ import AuditLog from "./AuditLog.js";
 import SystemConfig from "./SystemConfig.js";
 import CashRegisterSession from "./CashRegisterSession.js";
 import CashRegisterTransaction from "./CashRegisterTransaction.js";
+import Coupon from "./Coupon.js";
+import Promotion from "./Promotion.js";
 
 // ==========================================
 // CATÁLOGO Y REGLAS DE COMPOSICIÓN
@@ -89,6 +91,18 @@ CustomerOrder.belongsTo(CashRegisterSession, { foreignKey: 'cashRegisterSessionI
 User.hasMany(AuditLog, { foreignKey: 'userRut', sourceKey: 'rut' });
 AuditLog.belongsTo(User, { foreignKey: 'userRut', targetKey: 'rut' });
 
+// ==========================================
+// DESCUENTOS Y PROMOCIONES
+// ==========================================
+
+// Promotions "requiere" un Product para condición (ej: "compra 2 de este producto")
+Product.hasMany(Promotion, { foreignKey: 'conditionProductId', as: 'ConditionPromotions' });
+Promotion.belongsTo(Product, { foreignKey: 'conditionProductId', as: 'ConditionProduct' });
+
+// Promotions "premia" un Product (ej: "llévate este producto gratis")
+Product.hasMany(Promotion, { foreignKey: 'rewardProductId', as: 'RewardPromotions' });
+Promotion.belongsTo(Product, { foreignKey: 'rewardProductId', as: 'RewardProduct' });
+
 export {
   User,
   Customer,
@@ -101,5 +115,7 @@ export {
   AuditLog,
   SystemConfig,
   CashRegisterSession,
-  CashRegisterTransaction
+  CashRegisterTransaction,
+  Coupon,
+  Promotion
 };

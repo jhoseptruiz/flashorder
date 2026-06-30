@@ -36,7 +36,7 @@ export const getProducts = async (req, res) => {
 export const createProduct = async (req, res) => {
   const transaction = await sequelize.transaction();
   try {
-    const { name, categoryId, isComposite, baseCategoryId, relatedCategoryId, variants } = req.body;
+    const { name, categoryId, isComposite, baseCategoryId, relatedCategoryId, variants, discountType, discountValue, discountActive, isAccumulable } = req.body;
 
     // Validaciones
     if (!name || !name.trim()) {
@@ -73,6 +73,10 @@ export const createProduct = async (req, res) => {
         isComposite: isComposite || false,
         baseCategoryId: isComposite ? baseCategoryId : null,
         relatedCategoryId: relatedCategoryId || null,
+        discountType: discountType || 'none',
+        discountValue: parseInt(discountValue) || 0,
+        discountActive: !!discountActive,
+        isAccumulable: !!isAccumulable,
       },
       { transaction }
     );
@@ -118,7 +122,7 @@ export const updateProduct = async (req, res) => {
   const transaction = await sequelize.transaction();
   try {
     const { id } = req.params;
-    const { name, categoryId, isComposite, baseCategoryId, relatedCategoryId, isActive, variants } = req.body;
+    const { name, categoryId, isComposite, baseCategoryId, relatedCategoryId, isActive, variants, discountType, discountValue, discountActive, isAccumulable } = req.body;
 
     const product = await Product.findByPk(id, { transaction });
     if (!product) {
@@ -133,6 +137,12 @@ export const updateProduct = async (req, res) => {
     if (baseCategoryId !== undefined) product.baseCategoryId = isComposite ? baseCategoryId : null;
     if (relatedCategoryId !== undefined) product.relatedCategoryId = relatedCategoryId || null;
     if (isActive !== undefined) product.isActive = isActive;
+
+    // Discount fields
+    if (discountType !== undefined) product.discountType = discountType;
+    if (discountValue !== undefined) product.discountValue = parseInt(discountValue) || 0;
+    if (discountActive !== undefined) product.discountActive = discountActive;
+    if (isAccumulable !== undefined) product.isAccumulable = isAccumulable;
 
     await product.save({ transaction });
 

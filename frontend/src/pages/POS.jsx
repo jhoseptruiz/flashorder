@@ -21,6 +21,21 @@ function calendarDays(year, month) {
   return days;
 }
 
+const btnSmall = {
+  background: "transparent",
+  border: "1px solid var(--border)",
+  borderRadius: 8,
+  padding: "6px 12px",
+  fontSize: 12,
+  fontWeight: 500,
+  cursor: "pointer",
+  color: "var(--text)",
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 5,
+  fontFamily: "DM Sans, sans-serif",
+};
+
 // ── Componente Principal ──────────────────────────────────────────────────────
 export default function POS() {
   const { user } = useAuth();
@@ -47,6 +62,11 @@ export default function POS() {
 
   // Carrito
   const [cart, setCart] = useState([]);
+
+  // Cupón
+  const [couponCode, setCouponCode] = useState("");
+  const [appliedCoupon, setAppliedCoupon] = useState(null);
+  const [couponLoading, setCouponLoading] = useState(false);
 
   // Pedido
   const [customerName, setCustomerName]   = useState("");
@@ -127,6 +147,96 @@ export default function POS() {
     return paymentMethod === "efectivo" && cashReceived !== "" ? Math.max(0, (parseInt(cashReceived) || 0) - actualDeposit) : 0;
   }, [paymentMethod, cashReceived, actualDeposit]);
 
+  // ── Calcular descuento de producto/categoría ────────────────────────────────
+  const calcDiscountedPrice = (basePrice, product) => {
+    const cat = categories.find(c => c.id === product.categoryId);
+    const discounts = [];
+    
+    const now = new Date();
+    const currentDay = now.getDay(); // 0 = Sunday, 1 = Monday...
+
+    // Product-level discount
+    if (product.discountActive && product.discountType !== 'none') {
+      const amt = product.discountType === 'percentage'
+        ? Math.round(basePrice * product.discountValue / 100)
+        : product.discountValue;
+      discounts.push({ amount: amt, accumulable: product.isAccumulable, source: 'product', label: `${product.discountType === 'percentage' ? product.discountValue + '%' : '$' + product.discountValue} (Prod)` });
+    }
+
+    // Category-level discount
+    if (cat && cat.discountActive && cat.discountType !== 'none') {
+      let catValid = true;
+      if (cat.discountExpirationDate && new Date(cat.discountExpirationDate) < now) {
+        catValid = false;
+      }
+      if (cat.discountActiveDays && cat.discountActiveDays.length > 0) {
+        if (!cat.discountActiveDays.includes(currentDay)) catValid = false;
+      }
+      if (catValid) {
+        const amt = cat.discountType === 'percentage'
+          ? Math.round(basePrice * cat.discountValue / 100)
+          : cat.discountValue;
+        discounts.push({ amount: amt, accumulable: cat.isAccumulable, source: 'category', label: `${cat.discountType === 'percentage' ? cat.discountValue + '%' : '$' + cat.discountValue} (Cat)` });
+      }
+    }
+
+    if (discounts.length === 0) return { finalPrice: basePrice, discountAmount: 0, discountLabel: "" };
+
+    // If any discount is non-accumulable, only apply the biggest
+    const hasNonAccumulable = discounts.some(d => !d.accumulable);
+    let totalDiscount;
+    let label = "";
+
+    if (hasNonAccumulable) {
+      const best = discounts.reduce((prev, current) => (prev.amount > current.amount) ? prev : current);
+      totalDiscount = best.amount;
+      label = best.label;
+    } else {
+      totalDiscount = discounts.reduce((s, d) => s + d.amount, 0);
+      label = discounts.map(d => d.label).join(" + ");
+    }
+
+    totalDiscount = Math.min(totalDiscount, basePrice);
+    return { finalPrice: basePrice - totalDiscount, discountAmount: totalDiscount, discountLabel: label };
+  };
+
+  // ── Calcular descuento de cupón al total ───────────────────────────────
+  const couponDiscount = useMemo(() => {
+    if (!appliedCoupon) return 0;
+    if (appliedCoupon.discountType === 'percentage') {
+      return Math.round(cartTotal * appliedCoupon.discountValue / 100);
+    }
+    return Math.min(appliedCoupon.discountValue, cartTotal);
+  }, [appliedCoupon, cartTotal]);
+
+  const finalTotal = useMemo(() => Math.max(0, cartTotal - couponDiscount), [cartTotal, couponDiscount]);
+
+  // ── Validar cupón ──────────────────────────────────────────────
+  const handleApplyCoupon = async () => {
+    if (!couponCode.trim()) return;
+    setCouponLoading(true);
+    try {
+      const res = await apiFetch("/api/catalog/coupons/validate", {
+        method: "POST",
+        body: JSON.stringify({ code: couponCode.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Cupón inválido");
+      setAppliedCoupon(data);
+      showToast(`Cupón ${data.code} aplicado`, "success");
+    } catch (e) {
+      showToast(e.message, "error");
+      setAppliedCoupon(null);
+    } finally {
+      setCouponLoading(false);
+    }
+  };
+
+  const removeCoupon = () => {
+    setAppliedCoupon(null);
+    setCouponCode("");
+  };
+
   // ── Abrir modal de producto ─────────────────────────────────────────────────
   const openProduct = async (product) => {
     setSelectedProduct(product);
@@ -197,7 +307,9 @@ export default function POS() {
 
       const baseVariant = selectedProduct.variants?.[0];
       const basePrice = baseVariant ? baseVariant.price : 0;
-      const finalPrice = basePrice + componentsPrice;
+      const originalFinalPrice = basePrice + componentsPrice;
+      
+      const { finalPrice, discountAmount, discountLabel } = calcDiscountedPrice(originalFinalPrice, selectedProduct);
 
       setCart((prev) => [
         ...prev,
@@ -208,6 +320,9 @@ export default function POS() {
           variantId: baseVariant?.id || null,
           quantity: itemQty,
           unitPrice: finalPrice,
+          originalPrice: originalFinalPrice,
+          discountAmount,
+          discountLabel,
           subtotal: finalPrice * itemQty,
           notes: itemNote,
           groupId: crypto.randomUUID(),
@@ -215,12 +330,14 @@ export default function POS() {
         },
       ]);
     } else {
-      // Producto simple
+      // Producto simple con descuento
       const variant = selectedProduct.variants?.find((v) => v.id === selectedVariant);
       if (!variant) {
         showToast("Selecciona una variante", "error");
         return;
       }
+
+      const { finalPrice, discountAmount, discountLabel } = calcDiscountedPrice(variant.price, selectedProduct);
 
       setCart((prev) => [
         ...prev,
@@ -230,8 +347,11 @@ export default function POS() {
           variantName: variant.variantName,
           variantId: variant.id,
           quantity: itemQty,
-          unitPrice: variant.price,
-          subtotal: variant.price * itemQty,
+          unitPrice: finalPrice,
+          originalPrice: variant.price,
+          discountAmount,
+          discountLabel,
+          subtotal: finalPrice * itemQty,
           notes: itemNote,
           groupId: null,
           isComposite: false,
@@ -314,6 +434,7 @@ export default function POS() {
         cashChange: paymentMethod === "efectivo" ? Math.max(0, (parseInt(cashReceived) || 0) - actualDeposit) : 0,
         companyName: appName,
         companyLogo: appLogo,
+        couponCode: appliedCoupon ? appliedCoupon.code : null,
       };
 
       const res = await apiFetch("/api/pos/orders", {
@@ -335,6 +456,8 @@ export default function POS() {
       setDeposit("");
       setCashReceived("");
       setShowCheckout(false);
+      setAppliedCoupon(null);
+      setCouponCode("");
       // Refrescar estado de caja tras crear pedido
       refreshSession();
     } catch (e) {
@@ -436,22 +559,37 @@ export default function POS() {
               const minPrice = prod.variants?.length > 0
                 ? Math.min(...prod.variants.filter(v => v.isActive !== false).map((v) => v.price))
                 : 0;
+              const { discountAmount, discountLabel } = minPrice > 0 ? calcDiscountedPrice(minPrice, prod) : { discountAmount: 0, discountLabel: "" };
+              
               return (
                 <div
                   key={prod.id}
-                  style={S.card}
+                  style={{...S.card, position: "relative"}}
                   onClick={() => openProduct(prod)}
                   onMouseEnter={(e) => { e.currentTarget.style.borderColor = primary; e.currentTarget.style.transform = "translateY(-2px)"; }}
                   onMouseLeave={(e) => { e.currentTarget.style.borderColor = "var(--border)"; e.currentTarget.style.transform = "none"; }}
                 >
+                  {discountAmount > 0 && discountLabel && (
+                    <div style={{ position: "absolute", top: 8, right: 8, background: "#16a34a", color: "#fff", fontSize: 10, fontWeight: 700, padding: "3px 6px", borderRadius: 6, display: "flex", alignItems: "center", gap: 3, zIndex: 2, boxShadow: "0 2px 4px rgba(0,0,0,0.1)" }}>
+                      <i className="ti ti-discount-2" />
+                      {discountLabel}
+                    </div>
+                  )}
                   <div style={S.cardImg}>
                     <i className={`ti ${prod.isComposite ? "ti-puzzle" : "ti-package"}`} />
                   </div>
                   <div style={{ fontWeight: 600, fontSize: 13, color: "var(--text)", marginBottom: 4, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                     {prod.name}
                   </div>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: primary }}>
-                    {minPrice > 0 ? fmt(minPrice) : "Consultar"}
+                  <div style={{ display: "flex", flexDirection: "column" }}>
+                    {discountAmount > 0 && (
+                      <span style={{ fontSize: 11, textDecoration: "line-through", color: "var(--text2)", fontWeight: 500 }}>
+                        {fmt(minPrice)}
+                      </span>
+                    )}
+                    <div style={{ fontSize: 13, fontWeight: 700, color: discountAmount > 0 ? "#16a34a" : primary }}>
+                      {minPrice > 0 ? fmt(minPrice - discountAmount) : "Consultar"}
+                    </div>
                   </div>
                   {prod.isComposite && (
                     <div style={{ fontSize: 10, color: "var(--text2)", marginTop: 4 }}>Personalizable</div>
@@ -482,13 +620,28 @@ export default function POS() {
                     {item.productName}
                   </div>
                   <div style={{ fontSize: 11, color: "var(--text2)" }}>{item.variantName}</div>
+                  {item.discountAmount > 0 && item.discountLabel && (
+                    <div style={{ fontSize: 10, fontWeight: 700, color: "#16a34a", marginTop: 2 }}>
+                      <i className="ti ti-discount-2" style={{ marginRight: 4 }} />
+                      {item.discountLabel}
+                    </div>
+                  )}
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                   <button style={S.qtyBtn} onClick={() => updateQty(item.id, -1)}>-</button>
                   <span style={{ fontSize: 13, fontWeight: 600, minWidth: 16, textAlign: "center" }}>{item.quantity}</span>
                   <button style={S.qtyBtn} onClick={() => updateQty(item.id, 1)}>+</button>
                 </div>
-                <div style={{ fontWeight: 700, fontSize: 13, color: "var(--text)", minWidth: 70, textAlign: "right" }}>{fmt(item.subtotal)}</div>
+                <div style={{ fontWeight: 700, fontSize: 13, color: "var(--text)", minWidth: 70, textAlign: "right", display: "flex", flexDirection: "column", alignItems: "flex-end", justifyContent: "center" }}>
+                  {item.discountAmount > 0 && (
+                    <span style={{ fontSize: 10, textDecoration: "line-through", color: "var(--text2)", fontWeight: 500 }}>
+                      {fmt(item.originalPrice * item.quantity)}
+                    </span>
+                  )}
+                  <span style={{ color: item.discountAmount > 0 ? "#16a34a" : "var(--text)" }}>
+                    {fmt(item.subtotal)}
+                  </span>
+                </div>
                 <button onClick={() => removeItem(item.id)} style={{ border: "none", background: "transparent", cursor: "pointer", color: "#dc2626", fontSize: 14 }}>
                   <i className="ti ti-trash" />
                 </button>
@@ -499,17 +652,57 @@ export default function POS() {
 
         {/* Totales */}
         <div style={{ borderTop: "1px solid var(--border)", paddingTop: 12, display: "flex", flexDirection: "column", gap: 8 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 18, fontWeight: 700, color: "var(--text)" }}>
-            <span>Total</span>
-            <span>{fmt(cartTotal)}</span>
+          
+          {/* Cupón */}
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <div style={{ position: "relative", flex: 1 }}>
+              <i className="ti ti-ticket" style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: "var(--text2)", fontSize: 16 }} />
+              <input
+                className="input-field"
+                placeholder="Ingresar cupón..."
+                value={couponCode}
+                onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
+                disabled={!!appliedCoupon || couponLoading}
+                style={{ paddingLeft: 34, paddingRight: 34, padding: "8px 34px", fontSize: 13, textTransform: "uppercase" }}
+              />
+              {appliedCoupon && (
+                <i className="ti ti-check" style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", color: "#16a34a", fontSize: 16 }} />
+              )}
+            </div>
+            {appliedCoupon ? (
+              <button onClick={removeCoupon} style={{ ...btnSmall, color: "#dc2626", borderColor: "#fca5a5" }}>
+                <i className="ti ti-x" />
+              </button>
+            ) : (
+              <button onClick={handleApplyCoupon} disabled={!couponCode || couponLoading} style={{ ...btnSmall, background: couponCode ? primary : "var(--surface2)", color: couponCode ? "#fff" : "var(--text2)", border: "none" }}>
+                {couponLoading ? <i className="ti ti-loader" style={{ animation: "spin 1s linear infinite" }} /> : "Aplicar"}
+              </button>
+            )}
           </div>
 
-          <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}>
+          {/* Desglose */}
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, color: "var(--text2)", marginTop: 4 }}>
+            <span>Subtotal</span>
+            <span>{fmt(cartTotal)}</span>
+          </div>
+          {appliedCoupon && (
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, color: "#16a34a", fontWeight: 600 }}>
+              <span>Cupón ({appliedCoupon.code})</span>
+              <span>-{fmt(couponDiscount)}</span>
+            </div>
+          )}
+          
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 18, fontWeight: 700, color: "var(--text)", marginTop: 4, borderTop: "1px dashed var(--border)", paddingTop: 8 }}>
+            <span>Total</span>
+            <span>{fmt(finalTotal)}</span>
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, marginTop: 4 }}>
             <span style={{ color: "var(--text2)", fontWeight: 600 }}>Abono</span>
             <input
               className="input-field"
               type="number"
-              placeholder={fmt(cartTotal)}
+              placeholder={fmt(finalTotal)}
               value={deposit}
               onChange={(e) => setDeposit(e.target.value)}
               style={{ flex: 1, padding: "6px 10px" }}
