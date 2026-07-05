@@ -5,7 +5,7 @@ import { apiFetch } from "../utils/apiFetch";
 
 const ROLES = {
   empleado: { label: "Empleado", color: "#f9c7d1" },
-  cocinero: { label: "Cocinero", color: "#ffe3b3" },
+  cocinero: { label: "Producción", color: "#ffe3b3" },
   admin: { label: "Administrador", color: "#d0e2ff" },
 };
 

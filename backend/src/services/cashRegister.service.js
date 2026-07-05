@@ -3,6 +3,7 @@ import sequelize from "../db/db.js";
 import CashRegisterSession from "../models/CashRegisterSession.js";
 import CashRegisterTransaction from "../models/CashRegisterTransaction.js";
 import CustomerOrder from "../models/CustomerOrder.js";
+import User from "../models/User.js";
 import { createAuditLog } from "../helpers/audit.helper.js";
 
 // ── Obtener sesión activa con saldo calculado ─────────────────────────────────
@@ -263,4 +264,22 @@ export async function getSessionDetails(sessionId) {
     expectedCash,
     breakdown,
   };
+}
+
+// ── Obtener todas las sesiones (turnos) con datos de usuario ─────────────────
+export async function getAllSessions() {
+  const sessions = await CashRegisterSession.findAll({
+    include: [
+      {
+        model: User,
+        as: "OpenedBy",
+        attributes: ["rut", "fullName", "email", "role"],
+        where: { role: "empleado" },
+        required: true,
+      },
+    ],
+    order: [["openingDate", "DESC"]],
+  });
+
+  return sessions.map((s) => s.get({ plain: true }));
 }

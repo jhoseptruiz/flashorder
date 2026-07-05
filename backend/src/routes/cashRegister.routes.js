@@ -6,6 +6,7 @@ import {
   openSessionController,
   closeSessionController,
   getSessionDetailsController,
+  getAllSessionsController,
 } from "../controllers/cashRegister.controller.js";
 
 const cashRegisterRouter = Router();
@@ -39,6 +40,13 @@ cashRegisterRouter.get(
   "/sessions/:id",
   authorizeRoles("admin", "empleado"),
   getSessionDetailsController
+);
+
+// Obtener todas las sesiones (turnos) — solo admin
+cashRegisterRouter.get(
+  "/sessions",
+  authorizeRoles("admin"),
+  getAllSessionsController
 );
 
 export default cashRegisterRouter;
