@@ -21,6 +21,7 @@ export async function createOrder({
   cashReceived = 0,
   cashChange = 0,
   couponCode = null,
+  globalDiscount = 0,
 }) {
   const transaction = await sequelize.transaction();
 
@@ -46,9 +47,10 @@ export async function createOrder({
     );
 
     // 4. Calcular total
-    const totalAmount = items.reduce((sum, item) => {
+    let totalAmount = items.reduce((sum, item) => {
       return sum + item.quantity * item.unitPrice;
     }, 0);
+    totalAmount = Math.max(0, totalAmount - globalDiscount);
 
     // Calcular montos de efectivo finales
     let finalCashReceived = 0;

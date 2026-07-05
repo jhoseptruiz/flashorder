@@ -3,7 +3,7 @@ import { createOrder, getCompositionRules } from "../services/pos.service.js";
 
 export async function createOrderController(req, res) {
   try {
-    const { customer, items, deliveryDate, depositAmount, paymentMethod, notes, companyName, companyLogo, cashReceived, cashChange } = req.body;
+    const { customer, items, deliveryDate, depositAmount, paymentMethod, notes, companyName, companyLogo, cashReceived, cashChange, couponCode, globalDiscount } = req.body;
 
     // Validaciones básicas
     if (!customer || !customer.fullName || !customer.phone) {
@@ -41,6 +41,8 @@ export async function createOrderController(req, res) {
       createdByRut: req.user.rut,
       cashReceived: cashReceived ? parseInt(cashReceived) : 0,
       cashChange: cashChange ? parseInt(cashChange) : 0,
+      couponCode,
+      globalDiscount: globalDiscount ? parseInt(globalDiscount) : 0,
     });
 
     res.status(201).json({
