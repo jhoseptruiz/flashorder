@@ -143,13 +143,6 @@ export default function POS() {
   // Total del carrito
   const cartTotal = useMemo(() => cart.reduce((s, i) => s + i.subtotal, 0), [cart]);
 
-  const actualDeposit = useMemo(() => {
-    return deposit !== "" ? (parseInt(deposit) || 0) : cartTotal;
-  }, [deposit, cartTotal]);
-
-  const changeAmount = useMemo(() => {
-    return paymentMethod === "efectivo" && cashReceived !== "" ? Math.max(0, (parseInt(cashReceived) || 0) - actualDeposit) : 0;
-  }, [paymentMethod, cashReceived, actualDeposit]);
 
   // ── Calcular descuento de producto/categoría ────────────────────────────────
   const calcDiscountedPrice = (basePrice, product) => {
@@ -300,6 +293,14 @@ export default function POS() {
   }, [appliedCoupon, cartTotal, promotionDiscounts.discount]);
 
   const finalTotal = useMemo(() => Math.max(0, cartTotal - promotionDiscounts.discount - couponDiscount), [cartTotal, promotionDiscounts.discount, couponDiscount]);
+
+  const actualDeposit = useMemo(() => {
+    return deposit !== "" ? (parseInt(deposit) || 0) : finalTotal;
+  }, [deposit, finalTotal]);
+
+  const changeAmount = useMemo(() => {
+    return paymentMethod === "efectivo" && cashReceived !== "" ? Math.max(0, (parseInt(cashReceived) || 0) - actualDeposit) : 0;
+  }, [paymentMethod, cashReceived, actualDeposit]);
 
   // ── Validar cupón ──────────────────────────────────────────────
   const handleApplyCoupon = async () => {
@@ -521,9 +522,9 @@ export default function POS() {
         deliveryDate: deliveryDate ? deliveryDate.toISOString() : null,
         depositAmount: actualDeposit,
         paymentMethod,
-        notes: promotionDiscounts.discount > 0 ? `Descuento Promociones: -$${promotionDiscounts.discount}` : "",
+        notes: promotionDiscounts.discount > 0 ? `Descuento Promociones: -${fmt(promotionDiscounts.discount)}` : "",
         couponCode: appliedCoupon?.code || null,
-        globalDiscount: promotionDiscounts.discount + couponDiscount,
+        globalDiscount: Math.round(promotionDiscounts.discount + couponDiscount),
         cashReceived: paymentMethod === "efectivo" ? (parseInt(cashReceived) || 0) : 0,
         cashChange: paymentMethod === "efectivo" ? Math.max(0, (parseInt(cashReceived) || 0) - actualDeposit) : 0,
         companyName: appName,

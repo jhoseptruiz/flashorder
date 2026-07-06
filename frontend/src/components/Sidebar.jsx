@@ -72,6 +72,7 @@ export default function Sidebar({ isOpen = false, onClose = () => {} }) {
       }
     } catch (e) {
       showToast(e.message, "error");
+    } finally {
       setSubmitting(false);
     }
   };
@@ -475,6 +476,7 @@ export default function Sidebar({ isOpen = false, onClose = () => {} }) {
                       setShowCloseModal(false);
                       setClosingCashInput("");
                       setCloseNotes("");
+                      setSubmitting(false);
                       if (pendingLogout) {
                         setPendingLogout(false);
                         logout();

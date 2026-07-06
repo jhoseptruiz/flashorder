@@ -46,7 +46,7 @@ export async function createOrder({
       { transaction }
     );
 
-    // 4. Calcular total
+    // 4. Calcular total (globalDiscount ya incluye descuentos de promociones + cupón)
     let totalAmount = items.reduce((sum, item) => {
       return sum + item.quantity * item.unitPrice;
     }, 0);
@@ -79,18 +79,16 @@ export async function createOrder({
       throw new Error("Debes abrir la caja antes de registrar un pedido con pago en efectivo.");
     }
 
-    // 5b. Validar y aplicar cupón si se proporcionó
+    // 5b. Validar y registrar cupón si se proporcionó (solo para tracking, el descuento ya está en globalDiscount)
     let appliedCoupon = null;
     if (couponCode) {
       const coupon = await Coupon.findOne({ where: { code: couponCode.trim().toUpperCase() }, transaction });
-      if (!coupon) throw new Error("Cupón no encontrado");
-      if (!coupon.isActive) throw new Error("Este cupón está desactivado");
-      if (coupon.maxUses !== null && coupon.currentUses >= coupon.maxUses) throw new Error("Cupón agotado");
-      if (coupon.expirationDate && new Date(coupon.expirationDate) < new Date()) throw new Error("Cupón expirado");
-      appliedCoupon = coupon;
-      // Increment uses
-      coupon.currentUses += 1;
-      await coupon.save({ transaction });
+      if (coupon && coupon.isActive) {
+        appliedCoupon = coupon;
+        // Incrementar usos del cupón
+        coupon.currentUses += 1;
+        await coupon.save({ transaction });
+      }
     }
 
     // 6. Crear la orden

@@ -16,7 +16,7 @@ export async function createOrderController(req, res) {
 
     // Validar cada item
     for (const item of items) {
-      if (!item.productName || !item.quantity || !item.unitPrice) {
+      if (!item.productName || !item.quantity || item.unitPrice == null) {
         return res.status(400).json({
           error: "Cada producto debe tener nombre, cantidad y precio",
         });
