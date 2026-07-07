@@ -58,6 +58,32 @@ async function setupAPI() {
     await addColumnIfNotExists("customer_orders", "cash_received", "BIGINT", 0);
     await addColumnIfNotExists("customer_orders", "cash_change", "BIGINT", 0);
     await addColumnIfNotExists("customer_orders", "cash_register_session_id", "UUID", "NULL");
+    
+    // Cupones y Promociones (agrega timestamps que faltaron en la db)
+    await addColumnIfNotExists("coupons", "created_at", "TIMESTAMP WITH TIME ZONE", "CURRENT_TIMESTAMP");
+    await addColumnIfNotExists("coupons", "updated_at", "TIMESTAMP WITH TIME ZONE", "CURRENT_TIMESTAMP");
+    await addColumnIfNotExists("promotions", "created_at", "TIMESTAMP WITH TIME ZONE", "CURRENT_TIMESTAMP");
+    await addColumnIfNotExists("promotions", "updated_at", "TIMESTAMP WITH TIME ZONE", "CURRENT_TIMESTAMP");
+
+    // Discount fields for categories
+    try {
+      await sequelize.query(`DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'enum_categories_discount_type') THEN CREATE TYPE "enum_categories_discount_type" AS ENUM ('none', 'percentage', 'fixed'); END IF; END $$;`);
+    } catch(e) { /* type exists */ }
+    await addColumnIfNotExists("categories", "discount_type", '"enum_categories_discount_type"', "'none'");
+    await addColumnIfNotExists("categories", "discount_value", "INTEGER", 0);
+    await addColumnIfNotExists("categories", "discount_active", "BOOLEAN", "false");
+    await addColumnIfNotExists("categories", "is_accumulable", "BOOLEAN", "false");
+    await addColumnIfNotExists("categories", "discount_expiration_date", "TIMESTAMP WITH TIME ZONE", "NULL");
+    await addColumnIfNotExists("categories", "discount_active_days", "JSON", "NULL");
+
+    // Discount fields for products
+    try {
+      await sequelize.query(`DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'enum_products_discount_type') THEN CREATE TYPE "enum_products_discount_type" AS ENUM ('none', 'percentage', 'fixed'); END IF; END $$;`);
+    } catch(e) { /* type exists */ }
+    await addColumnIfNotExists("products", "discount_type", '"enum_products_discount_type"', "'none'");
+    await addColumnIfNotExists("products", "discount_value", "INTEGER", 0);
+    await addColumnIfNotExists("products", "discount_active", "BOOLEAN", "false");
+    await addColumnIfNotExists("products", "is_accumulable", "BOOLEAN", "false");
 
     await sequelize.sync();
     console.log("=> Modelos sincronizados con la base de datos");

@@ -21,6 +21,8 @@ export default function Catalogo() {
   // Data
   const [categorias, setCategorias] = useState([]);
   const [productos, setProductos] = useState([]);
+  const [cupones, setCupones] = useState([]);
+  const [promociones, setPromociones] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
 
   // UI
@@ -31,22 +33,32 @@ export default function Catalogo() {
   // Modals
   const [catModal, setCatModal] = useState({ open: false, data: null });
   const [prodModal, setProdModal] = useState({ open: false, data: null });
+  const [couponModal, setCouponModal] = useState({ open: false, data: null });
+  const [promoModal, setPromoModal] = useState({ open: false, data: null });
 
   // ─── Fetch ────────────────────────────────────────
   const fetchData = async () => {
     try {
-      const [catRes, prodRes] = await Promise.all([
+      const [catRes, prodRes, coupRes, promoRes] = await Promise.all([
         apiFetch(`/api/catalog/categories`),
         apiFetch(`/api/catalog/products`),
+        apiFetch(`/api/catalog/coupons`),
+        apiFetch(`/api/catalog/promotions`),
       ]);
       const catData = catRes.ok ? await catRes.json() : [];
       const prodData = prodRes.ok ? await prodRes.json() : [];
+      const coupData = coupRes.ok ? await coupRes.json() : [];
+      const promoData = promoRes.ok ? await promoRes.json() : [];
       setCategorias(Array.isArray(catData) ? catData : []);
       setProductos(Array.isArray(prodData) ? prodData : []);
+      setCupones(Array.isArray(coupData) ? coupData : []);
+      setPromociones(Array.isArray(promoData) ? promoData : []);
     } catch (err) {
       console.error("Error al cargar catálogo:", err);
       setCategorias([]);
       setProductos([]);
+      setCupones([]);
+      setPromociones([]);
     } finally {
       setIsLoading(false);
     }
@@ -194,12 +206,78 @@ export default function Catalogo() {
     }
   };
 
+  // ─── Coupon CRUD ──────────────────────────────────
+  const openCouponCreate = () =>
+    setCouponModal({ open: true, data: { code: "", discountType: "percentage", discountValue: "", maxUses: "", expirationDate: "", isAccumulable: false } });
+
+  const openCouponEdit = (c) =>
+    setCouponModal({ open: true, data: { ...c, expirationDate: c.expirationDate ? c.expirationDate.substring(0, 10) : "" } });
+
+  const saveCoupon = async (formData) => {
+    const isEdit = !!formData.id;
+    try {
+      const url = isEdit ? `${API_URL}/api/catalog/coupons/${formData.id}` : `${API_URL}/api/catalog/coupons`;
+      const res = await apiFetch(url, { method: isEdit ? "PUT" : "POST", body: JSON.stringify(formData) });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Error al guardar cupón");
+      showToast(isEdit ? "Cupón actualizado" : "Cupón creado", "success");
+      setCouponModal({ open: false, data: null });
+      fetchData();
+    } catch (err) { showToast(err.message, "error"); }
+  };
+
+  const deleteCoupon = async (c) => {
+    const result = await Swal.fire({ title: "¿Eliminar cupón?", html: `Se eliminará <strong>${c.code}</strong> permanentemente.`, icon: "warning", showCancelButton: true, confirmButtonColor: "#dc2626", cancelButtonText: "Cancelar", confirmButtonText: "Sí, eliminar" });
+    if (!result.isConfirmed) return;
+    try {
+      const res = await apiFetch(`/api/catalog/coupons/${c.id}`, { method: "DELETE" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Error al eliminar");
+      showToast("Cupón eliminado", "success");
+      fetchData();
+    } catch (err) { showToast(err.message, "error"); }
+  };
+
+  // ─── Promotion CRUD ───────────────────────────────
+  const openPromoCreate = () =>
+    setPromoModal({ open: true, data: { name: "", promotionType: "bogo", conditionProductId: "", conditionMinQuantity: "", conditionMinAmount: "", rewardProductId: "", rewardDiscountType: "free", rewardValue: "" } });
+
+  const openPromoEdit = (p) =>
+    setPromoModal({ open: true, data: { ...p, conditionProductId: p.conditionProductId || "", rewardProductId: p.rewardProductId || "" } });
+
+  const savePromo = async (formData) => {
+    const isEdit = !!formData.id;
+    try {
+      const url = isEdit ? `${API_URL}/api/catalog/promotions/${formData.id}` : `${API_URL}/api/catalog/promotions`;
+      const res = await apiFetch(url, { method: isEdit ? "PUT" : "POST", body: JSON.stringify(formData) });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Error al guardar promoción");
+      showToast(isEdit ? "Promoción actualizada" : "Promoción creada", "success");
+      setPromoModal({ open: false, data: null });
+      fetchData();
+    } catch (err) { showToast(err.message, "error"); }
+  };
+
+  const deletePromo = async (p) => {
+    const result = await Swal.fire({ title: "¿Eliminar promoción?", html: `Se eliminará <strong>${p.name}</strong> permanentemente.`, icon: "warning", showCancelButton: true, confirmButtonColor: "#dc2626", cancelButtonText: "Cancelar", confirmButtonText: "Sí, eliminar" });
+    if (!result.isConfirmed) return;
+    try {
+      const res = await apiFetch(`/api/catalog/promotions/${p.id}`, { method: "DELETE" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Error al eliminar");
+      showToast("Promoción eliminada", "success");
+      fetchData();
+    } catch (err) { showToast(err.message, "error"); }
+  };
+
   // ─── Stats ────────────────────────────────────────
   const stats = useMemo(() => ({
     total: productos.length,
     active: productos.filter((p) => p.isActive).length,
     categories: categorias.length,
-  }), [productos, categorias]);
+    coupons: cupones.length,
+    promotions: promociones.length,
+  }), [productos, categorias, cupones, promociones]);
 
   // ─── Loading ──────────────────────────────────────
   if (isLoading) {
@@ -230,6 +308,8 @@ export default function Catalogo() {
             <StatBadge icon="ti-package" label="Productos" value={stats.total} color={primary} />
             <StatBadge icon="ti-circle-check" label="Activos" value={stats.active} color="#16a34a" />
             <StatBadge icon="ti-category" label="Categorías" value={stats.categories} color="#6366f1" />
+            <StatBadge icon="ti-ticket" label="Cupones" value={stats.coupons} color="#d97706" />
+            <StatBadge icon="ti-gift" label="Promociones" value={stats.promotions} color="#dc2626" />
           </div>
         </div>
         <div style={{ display: "flex", gap: 10, flexShrink: 0 }}>
@@ -244,7 +324,7 @@ export default function Catalogo() {
 
       {/* ─── Tabs ────────────────────────────────────── */}
       <div style={{ display: "flex", gap: 0, borderBottom: "2px solid var(--border)", marginBottom: 24 }}>
-        {["productos", "categorias"].map((tab) => (
+        {["productos", "categorias", "cupones", "promociones"].map((tab) => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
@@ -262,7 +342,10 @@ export default function Catalogo() {
               marginBottom: -2,
             }}
           >
-            {tab === "productos" ? `Productos (${productos.length})` : `Categorías (${categorias.length})`}
+            {tab === "productos" ? `Productos (${productos.length})`
+              : tab === "categorias" ? `Categorías (${categorias.length})`
+              : tab === "cupones" ? `Cupones (${cupones.length})`
+              : `Promociones (${promociones.length})`}
           </button>
         ))}
       </div>
@@ -343,6 +426,45 @@ export default function Catalogo() {
           )}
         </>
       )}
+      {/* ─── Tab: Cupones ────────────────────────────── */}
+      {activeTab === "cupones" && (
+        <>
+          <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 16 }}>
+            <button onClick={openCouponCreate} style={{ ...btnSolid, background: primary }}>
+              <i className="ti ti-plus" style={{ fontSize: 17 }} /> Nuevo Cupón
+            </button>
+          </div>
+          {cupones.length === 0 ? (
+            <EmptyState icon="ti-ticket-off" title="No hay cupones" subtitle="Crea tu primer cupón de descuento" />
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {cupones.map((c) => (
+                <CouponRow key={c.id} coupon={c} primary={primary} onEdit={() => openCouponEdit(c)} onDelete={() => deleteCoupon(c)} />
+              ))}
+            </div>
+          )}
+        </>
+      )}
+
+      {/* ─── Tab: Promociones ─────────────────────────── */}
+      {activeTab === "promociones" && (
+        <>
+          <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 16 }}>
+            <button onClick={openPromoCreate} style={{ ...btnSolid, background: primary }}>
+              <i className="ti ti-plus" style={{ fontSize: 17 }} /> Nueva Promoción
+            </button>
+          </div>
+          {promociones.length === 0 ? (
+            <EmptyState icon="ti-gift-off" title="No hay promociones" subtitle="Crea tu primera promoción condicional" />
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {promociones.map((p) => (
+                <PromotionRow key={p.id} promotion={p} primary={primary} onEdit={() => openPromoEdit(p)} onDelete={() => deletePromo(p)} />
+              ))}
+            </div>
+          )}
+        </>
+      )}
 
       {/* ─── Modal: Categoría ────────────────────────── */}
       {catModal.open && (
@@ -363,6 +485,27 @@ export default function Catalogo() {
           primaryLight={primaryLight}
           onClose={() => setProdModal({ open: false, data: null })}
           onSave={saveProd}
+        />
+      )}
+
+      {/* ─── Modal: Cupón ────────────────────────────── */}
+      {couponModal.open && (
+        <CouponModal
+          data={couponModal.data}
+          primary={primary}
+          onClose={() => setCouponModal({ open: false, data: null })}
+          onSave={saveCoupon}
+        />
+      )}
+
+      {/* ─── Modal: Promoción ────────────────────────── */}
+      {promoModal.open && (
+        <PromotionModal
+          data={promoModal.data}
+          productos={productos}
+          primary={primary}
+          onClose={() => setPromoModal({ open: false, data: null })}
+          onSave={savePromo}
         />
       )}
     </div>
@@ -507,6 +650,13 @@ function CategoryRow({ category, primary, onEdit, onDelete }) {
                 Mín: {category.minItems ?? 0} / Máx: {category.maxItems ?? "∞"}
               </span>
             )}
+            {category.discountActive && category.discountType !== 'none' && (
+              <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 10px", borderRadius: 999, background: "#fef3c7", color: "#92400e", display: "inline-flex", alignItems: "center", gap: 4 }}>
+                <i className="ti ti-discount-2" style={{ fontSize: 12 }} />
+                {category.discountType === 'percentage' ? `${category.discountValue}%` : `$${category.discountValue?.toLocaleString("es-CL")}`} dcto
+                {!category.isAccumulable && " (único)"}
+              </span>
+            )}
           </div>
         </div>
       </div>
@@ -529,7 +679,7 @@ function CategoryRow({ category, primary, onEdit, onDelete }) {
 // ════════════════════════════════════════════════════════
 
 function CategoryModal({ data, primary, onClose, onSave }) {
-  const [form, setForm] = useState({ ...data, minItems: data.minItems ?? 0, maxItems: data.maxItems ?? "" });
+  const [form, setForm] = useState({ ...data, minItems: data.minItems ?? 0, maxItems: data.maxItems ?? "", discountType: data.discountType || 'none', discountValue: data.discountValue || "", discountActive: data.discountActive || false, isAccumulable: data.isAccumulable || false, discountExpirationDate: data.discountExpirationDate ? data.discountExpirationDate.split('T')[0] : "", discountActiveDays: data.discountActiveDays || [] });
   const [submitting, setSubmitting] = useState(false);
   const isEdit = !!form.id;
 
@@ -631,6 +781,72 @@ function CategoryModal({ data, primary, onClose, onSave }) {
             • <strong>Independiente:</strong> productos que se venden directamente (ej: Bebidas, Postres)<br />
             • <strong>Base:</strong> categoría madre para armar compuestos (ej: Tipos de Pizza)<br />
             • <strong>Complemento:</strong> ingredientes opcionales (ej: Toppings, Salsas)
+          </div>
+          {/* Descuento */}
+          <div style={{ background: "var(--surface2)", borderRadius: 10, padding: "14px 18px" }}>
+            <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14, fontWeight: 600, color: "var(--text)", marginBottom: 12 }}>
+              <i className="ti ti-discount-2" style={{ fontSize: 18, color: "#d97706" }} />
+              Descuento de categoría
+            </label>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+              <Field label="Tipo de descuento">
+                <select className="input-field" value={form.discountType} onChange={(e) => setForm({ ...form, discountType: e.target.value })}>
+                  <option value="none">Sin descuento</option>
+                  <option value="percentage">Porcentaje (%)</option>
+                  <option value="fixed">Monto fijo ($)</option>
+                </select>
+              </Field>
+              {form.discountType !== 'none' && (
+                <Field label={form.discountType === 'percentage' ? "Porcentaje" : "Monto"}>
+                  <input className="input-field" type="number" min="0" value={form.discountValue} onChange={(e) => setForm({ ...form, discountValue: e.target.value })} placeholder={form.discountType === 'percentage' ? "Ej: 10" : "Ej: 1500"} />
+                </Field>
+              )}
+            </div>
+            {form.discountType !== 'none' && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 12 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+                  <Field label="Fecha de expiración (opcional)">
+                    <input className="input-field" type="date" value={form.discountExpirationDate} onChange={(e) => setForm({ ...form, discountExpirationDate: e.target.value })} />
+                  </Field>
+                  <Field label="Días activos (opcional)">
+                    <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 4 }}>
+                      {['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'].map((day, i) => (
+                        <button
+                          key={i}
+                          type="button"
+                          onClick={() => {
+                            const current = form.discountActiveDays || [];
+                            const updated = current.includes(i) ? current.filter(d => d !== i) : [...current, i];
+                            setForm({ ...form, discountActiveDays: updated });
+                          }}
+                          style={{
+                            padding: "4px 8px", fontSize: 11, fontWeight: 600, borderRadius: 6, cursor: "pointer", border: "1px solid",
+                            background: form.discountActiveDays?.includes(i) ? primary : "transparent",
+                            color: form.discountActiveDays?.includes(i) ? "#fff" : "var(--text2)",
+                            borderColor: form.discountActiveDays?.includes(i) ? primary : "var(--border)",
+                          }}
+                        >
+                          {day}
+                        </button>
+                      ))}
+                    </div>
+                  </Field>
+                </div>
+                <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", fontSize: 13, color: "var(--text)", marginTop: 8 }}>
+                  <input type="checkbox" checked={form.discountActive} onChange={(e) => setForm({ ...form, discountActive: e.target.checked })} style={{ width: 18, height: 18, accentColor: primary }} />
+                  <i className="ti ti-toggle-right" style={{ fontSize: 16, color: "var(--text2)" }} />
+                  Descuento activo
+                </label>
+                <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", fontSize: 13, color: "var(--text)" }}>
+                  <input type="checkbox" checked={!form.isAccumulable} onChange={(e) => setForm({ ...form, isAccumulable: !e.target.checked })} style={{ width: 18, height: 18, accentColor: primary }} />
+                  <i className="ti ti-shield-lock" style={{ fontSize: 16, color: "var(--text2)" }} />
+                  Descuento único (no se acumula con otros)
+                </label>
+                <p style={{ fontSize: 11, color: "var(--text2)", marginTop: 2 }}>
+                  Si está marcado como "único", cuando haya múltiples descuentos solo se aplicará el de mayor beneficio.
+                </p>
+              </div>
+            )}
           </div>
 
           <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 4 }}>
@@ -955,3 +1171,243 @@ const btnSmall = {
   gap: 5,
   fontFamily: "DM Sans, sans-serif",
 };
+
+// ════════════════════════════════════════════════════════
+//  SUBCOMPONENTES: CUPONES
+// ════════════════════════════════════════════════════════
+
+function CouponRow({ coupon, primary, onEdit, onDelete }) {
+  const isExpired = coupon.expirationDate && new Date(coupon.expirationDate) < new Date();
+  const usesText = coupon.maxUses ? `${coupon.currentUses}/${coupon.maxUses} usos` : `${coupon.currentUses} usos`;
+
+  return (
+    <article className="card" style={{ padding: "16px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 14, flex: 1, minWidth: 0 }}>
+        <div style={{ width: 40, height: 40, borderRadius: 10, background: "#fffbeb", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+          <i className="ti ti-ticket" style={{ fontSize: 19, color: "#d97706" }} />
+        </div>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: 16, fontWeight: 700, color: "var(--text)", letterSpacing: "0.5px" }}>
+            {coupon.code}
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 4, flexWrap: "wrap" }}>
+            <span style={{ fontSize: 12, fontWeight: 600, padding: "2px 10px", borderRadius: 999, background: "#fef3c7", color: "#92400e" }}>
+              {coupon.discountType === 'percentage' ? `${coupon.discountValue}%` : `$${coupon.discountValue?.toLocaleString("es-CL")}`}
+            </span>
+            <span style={{ fontSize: 12, color: "var(--text2)" }}>{usesText}</span>
+            {coupon.expirationDate && (
+              <span style={{ fontSize: 11, color: isExpired ? "#dc2626" : "var(--text2)" }}>
+                {isExpired ? "Expirado" : `Expira: ${new Date(coupon.expirationDate).toLocaleDateString("es-CL")}`}
+              </span>
+            )}
+            <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 999, background: coupon.isActive && !isExpired ? "#dcfce7" : "#fee2e2", color: coupon.isActive && !isExpired ? "#15803d" : "#dc2626" }}>
+              {coupon.isActive && !isExpired ? "Activo" : "Inactivo"}
+            </span>
+            {!coupon.isAccumulable && (
+              <span style={{ fontSize: 10, fontWeight: 600, padding: "2px 8px", borderRadius: 999, background: "#e0e7ff", color: "#4338ca" }}>Único</span>
+            )}
+          </div>
+        </div>
+      </div>
+      <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+        <button onClick={onEdit} style={btnSmall}><i className="ti ti-edit" style={{ fontSize: 15 }} /> Editar</button>
+        <button onClick={onDelete} style={{ ...btnSmall, color: "#dc2626", borderColor: "#fca5a5" }}><i className="ti ti-trash" style={{ fontSize: 15 }} /></button>
+      </div>
+    </article>
+  );
+}
+
+function CouponModal({ data, primary, onClose, onSave }) {
+  const [form, setForm] = useState({ ...data });
+  const [submitting, setSubmitting] = useState(false);
+  const isEdit = !!form.id;
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setSubmitting(true);
+    await onSave(form);
+    setSubmitting(false);
+  };
+
+  return (
+    <Overlay onClose={onClose}>
+      <div className="card" style={{ width: "min(520px, 100%)", padding: 24, position: "relative", boxShadow: "0 28px 80px rgba(15,23,42,0.32)" }} onClick={(e) => e.stopPropagation()}>
+        <ModalHeader title={isEdit ? "Editar cupón" : "Nuevo cupón"} subtitle="Configura un código de descuento" onClose={onClose} />
+        <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+          <Field label="Código del cupón">
+            <input className="input-field" value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value.toUpperCase() })} placeholder="Ej: VERANO20" required style={{ textTransform: "uppercase", letterSpacing: "1px", fontWeight: 700 }} />
+          </Field>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+            <Field label="Tipo de descuento">
+              <select className="input-field" value={form.discountType} onChange={(e) => setForm({ ...form, discountType: e.target.value })}>
+                <option value="percentage">Porcentaje (%)</option>
+                <option value="fixed">Monto fijo ($)</option>
+              </select>
+            </Field>
+            <Field label={form.discountType === 'percentage' ? "Porcentaje" : "Monto"}>
+              <input className="input-field" type="number" min="1" value={form.discountValue} onChange={(e) => setForm({ ...form, discountValue: e.target.value })} placeholder={form.discountType === 'percentage' ? "Ej: 15" : "Ej: 2000"} required />
+            </Field>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+            <Field label="Máximo de usos (vacío = ilimitado)">
+              <input className="input-field" type="number" min="1" value={form.maxUses} onChange={(e) => setForm({ ...form, maxUses: e.target.value })} placeholder="Sin límite" />
+            </Field>
+            <Field label="Fecha de expiración">
+              <input className="input-field" type="date" value={form.expirationDate} onChange={(e) => setForm({ ...form, expirationDate: e.target.value })} />
+            </Field>
+          </div>
+
+          <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", fontSize: 13, color: "var(--text)" }}>
+            <input type="checkbox" checked={!form.isAccumulable} onChange={(e) => setForm({ ...form, isAccumulable: !e.target.checked })} style={{ width: 18, height: 18, accentColor: primary }} />
+            <i className="ti ti-shield-lock" style={{ fontSize: 16, color: "var(--text2)" }} />
+            Descuento único (no se acumula con otros)
+          </label>
+
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 4 }}>
+            <button type="button" onClick={onClose} style={btnOutline}>Cancelar</button>
+            <button type="submit" disabled={submitting} style={{ ...btnSolid, background: primary, opacity: submitting ? 0.7 : 1 }}>
+              <i className={`ti ${isEdit ? "ti-device-floppy" : "ti-plus"}`} style={{ fontSize: 16 }} />
+              {isEdit ? "Guardar cambios" : "Crear cupón"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </Overlay>
+  );
+}
+
+
+// ════════════════════════════════════════════════════════
+//  SUBCOMPONENTES: PROMOCIONES
+// ════════════════════════════════════════════════════════
+
+function PromotionRow({ promotion, primary, onEdit, onDelete }) {
+  const typeLabel = promotion.promotionType === 'bogo' ? 'Compra X lleva Y' : 'Monto mínimo';
+  const rewardLabel = promotion.rewardDiscountType === 'free' ? 'Gratis' : promotion.rewardDiscountType === 'percentage' ? `${promotion.rewardValue}% dcto` : `$${promotion.rewardValue?.toLocaleString("es-CL")} dcto`;
+
+  return (
+    <article className="card" style={{ padding: "16px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 14, flex: 1, minWidth: 0 }}>
+        <div style={{ width: 40, height: 40, borderRadius: 10, background: "#fef2f2", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+          <i className="ti ti-gift" style={{ fontSize: 19, color: "#dc2626" }} />
+        </div>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+            {promotion.name}
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 4, flexWrap: "wrap" }}>
+            <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 10px", borderRadius: 999, background: "#ede9fe", color: "#6d28d9" }}>{typeLabel}</span>
+            <span style={{ fontSize: 11, fontWeight: 600, padding: "2px 10px", borderRadius: 999, background: "#fef3c7", color: "#92400e" }}>Premio: {rewardLabel}</span>
+            {promotion.ConditionProduct && <span style={{ fontSize: 12, color: "var(--text2)" }}>Condición: {promotion.ConditionProduct.name}</span>}
+            {promotion.RewardProduct && <span style={{ fontSize: 12, color: "var(--text2)" }}>Producto premio: {promotion.RewardProduct.name}</span>}
+            <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 999, background: promotion.isActive ? "#dcfce7" : "#fee2e2", color: promotion.isActive ? "#15803d" : "#dc2626" }}>
+              {promotion.isActive ? "Activa" : "Inactiva"}
+            </span>
+          </div>
+        </div>
+      </div>
+      <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+        <button onClick={onEdit} style={btnSmall}><i className="ti ti-edit" style={{ fontSize: 15 }} /> Editar</button>
+        <button onClick={onDelete} style={{ ...btnSmall, color: "#dc2626", borderColor: "#fca5a5" }}><i className="ti ti-trash" style={{ fontSize: 15 }} /></button>
+      </div>
+    </article>
+  );
+}
+
+function PromotionModal({ data, productos, primary, onClose, onSave }) {
+  const [form, setForm] = useState({ ...data });
+  const [submitting, setSubmitting] = useState(false);
+  const isEdit = !!form.id;
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setSubmitting(true);
+    await onSave(form);
+    setSubmitting(false);
+  };
+
+  return (
+    <Overlay onClose={onClose}>
+      <div className="card" style={{ width: "min(620px, 100%)", padding: 24, position: "relative", boxShadow: "0 28px 80px rgba(15,23,42,0.32)", maxHeight: "90vh", overflowY: "auto" }} onClick={(e) => e.stopPropagation()}>
+        <ModalHeader title={isEdit ? "Editar promoción" : "Nueva promoción"} subtitle="Configura una promoción condicional para el carrito" onClose={onClose} />
+        <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+          <Field label="Nombre de la promoción">
+            <input className="input-field" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Ej: Compra 2 pizzas y lleva 1 bebida gratis" required />
+          </Field>
+
+          <Field label="Tipo de promoción">
+            <select className="input-field" value={form.promotionType} onChange={(e) => setForm({ ...form, promotionType: e.target.value })}>
+              <option value="bogo">Compra X y lleva Y (BOGO)</option>
+              <option value="threshold">Descuento por monto mínimo</option>
+            </select>
+          </Field>
+
+          {/* Condición */}
+          <div style={{ background: "var(--surface2)", borderRadius: 10, padding: "14px 18px" }}>
+            <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14, fontWeight: 600, color: "var(--text)", marginBottom: 12 }}>
+              <i className="ti ti-filter" style={{ fontSize: 18, color: "var(--text2)" }} />
+              Condición
+            </label>
+            {form.promotionType === 'bogo' ? (
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+                <Field label="Producto requerido">
+                  <select className="input-field" value={form.conditionProductId} onChange={(e) => setForm({ ...form, conditionProductId: e.target.value })}>
+                    <option value="">Cualquier producto</option>
+                    {productos.filter(p => p.isActive !== false).map((p) => (<option key={p.id} value={p.id}>{p.name}</option>))}
+                  </select>
+                </Field>
+                <Field label="Cantidad mínima">
+                  <input className="input-field" type="number" min="1" value={form.conditionMinQuantity} onChange={(e) => setForm({ ...form, conditionMinQuantity: e.target.value })} placeholder="Ej: 2" />
+                </Field>
+              </div>
+            ) : (
+              <Field label="Monto mínimo en el carrito ($)">
+                <input className="input-field" type="number" min="1" value={form.conditionMinAmount} onChange={(e) => setForm({ ...form, conditionMinAmount: e.target.value })} placeholder="Ej: 15000" />
+              </Field>
+            )}
+          </div>
+
+          {/* Recompensa */}
+          <div style={{ background: "var(--surface2)", borderRadius: 10, padding: "14px 18px" }}>
+            <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14, fontWeight: 600, color: "var(--text)", marginBottom: 12 }}>
+              <i className="ti ti-gift" style={{ fontSize: 18, color: "#dc2626" }} />
+              Recompensa
+            </label>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+              <Field label="Producto de premio">
+                <select className="input-field" value={form.rewardProductId} onChange={(e) => setForm({ ...form, rewardProductId: e.target.value })}>
+                  <option value="">Descuento al total</option>
+                  {productos.filter(p => p.isActive !== false).map((p) => (<option key={p.id} value={p.id}>{p.name}</option>))}
+                </select>
+              </Field>
+              <Field label="Tipo de premio">
+                <select className="input-field" value={form.rewardDiscountType} onChange={(e) => setForm({ ...form, rewardDiscountType: e.target.value })}>
+                  <option value="free">Gratis (100% dcto)</option>
+                  <option value="percentage">Porcentaje de descuento</option>
+                  <option value="fixed">Monto fijo de descuento</option>
+                </select>
+              </Field>
+            </div>
+            {form.rewardDiscountType !== 'free' && (
+              <div style={{ marginTop: 14 }}>
+                <Field label={form.rewardDiscountType === 'percentage' ? "Porcentaje" : "Monto"}>
+                  <input className="input-field" type="number" min="1" value={form.rewardValue} onChange={(e) => setForm({ ...form, rewardValue: e.target.value })} placeholder={form.rewardDiscountType === 'percentage' ? "Ej: 50" : "Ej: 3000"} />
+                </Field>
+              </div>
+            )}
+          </div>
+
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 4 }}>
+            <button type="button" onClick={onClose} style={btnOutline}>Cancelar</button>
+            <button type="submit" disabled={submitting} style={{ ...btnSolid, background: primary, opacity: submitting ? 0.7 : 1 }}>
+              <i className={`ti ${isEdit ? "ti-device-floppy" : "ti-plus"}`} style={{ fontSize: 16 }} />
+              {isEdit ? "Guardar cambios" : "Crear promoción"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </Overlay>
+  );
+}

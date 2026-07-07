@@ -3,7 +3,7 @@ import sequelize from "../db/db.js";
 import Customer from "../models/Customer.js";
 import CustomerOrder from "../models/CustomerOrder.js";
 import OrderItem from "../models/OrderItem.js";
-import { Category, CompositionRule, Product, ProductVariant } from "../models/index.models.js";
+import { Category, CompositionRule, Coupon, Product, ProductVariant } from "../models/index.models.js";
 import { sendReceiptEmail } from "./email.service.js";
 import { getActiveSession, registerTransaction } from "./cashRegister.service.js";
 
@@ -20,6 +20,7 @@ export async function createOrder({
   createdByRut,
   cashReceived = 0,
   cashChange = 0,
+  couponCode = null,
 }) {
   const transaction = await sequelize.transaction();
 
@@ -76,7 +77,26 @@ export async function createOrder({
       throw new Error("Debes abrir la caja antes de registrar un pedido con pago en efectivo.");
     }
 
+    // 5b. Validar y aplicar cupón si se proporcionó
+    let appliedCoupon = null;
+    if (couponCode) {
+      const coupon = await Coupon.findOne({ where: { code: couponCode.trim().toUpperCase() }, transaction });
+      if (!coupon) throw new Error("Cupón no encontrado");
+      if (!coupon.isActive) throw new Error("Este cupón está desactivado");
+      if (coupon.maxUses !== null && coupon.currentUses >= coupon.maxUses) throw new Error("Cupón agotado");
+      if (coupon.expirationDate && new Date(coupon.expirationDate) < new Date()) throw new Error("Cupón expirado");
+      appliedCoupon = coupon;
+      // Increment uses
+      coupon.currentUses += 1;
+      await coupon.save({ transaction });
+    }
+
     // 6. Crear la orden
+    const orderNotes = [
+      notes || "",
+      appliedCoupon ? `Cupón: ${appliedCoupon.code} (-${appliedCoupon.discountType === 'percentage' ? appliedCoupon.discountValue + '%' : '$' + appliedCoupon.discountValue.toLocaleString('es-CL')})` : "",
+    ].filter(Boolean).join(" | ") || null;
+
     const order = await CustomerOrder.create(
       {
         customerId: newCustomer.id,
@@ -90,7 +110,7 @@ export async function createOrder({
         companyLogo: companyLogo || null,
         source: "local",
         status: "pendiente",
-        notes: notes || null,
+        notes: orderNotes,
         cashReceived: finalCashReceived,
         cashChange: finalCashChange,
         cashRegisterSessionId: activeSession ? activeSession.id : null,

@@ -27,7 +27,27 @@ const Product = sequelize.define("Product", {
     type: DataTypes.UUID,
     allowNull: true,
     defaultValue: null,
-  }
+  },
+  discountType: {
+    type: DataTypes.ENUM('none', 'percentage', 'fixed'),
+    defaultValue: 'none',
+    allowNull: false,
+  },
+  discountValue: {
+    type: DataTypes.INTEGER,
+    defaultValue: 0,
+    allowNull: false,
+  },
+  discountActive: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false,
+    allowNull: false,
+  },
+  isAccumulable: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false,
+    allowNull: false,
+  },
 }, {
   tableName: "products",
 });

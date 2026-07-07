@@ -30,7 +30,7 @@ export const getCategories = async (req, res) => {
 // POST /api/catalog/categories
 export const createCategory = async (req, res) => {
   try {
-    const { name, behavior, displayOrder, minItems, maxItems } = req.body;
+    const { name, behavior, displayOrder, minItems, maxItems, discountType, discountValue, discountActive, isAccumulable, discountExpirationDate, discountActiveDays } = req.body;
 
     if (!name || !name.trim()) {
       return res.status(400).json({ error: "El nombre es obligatorio" });
@@ -44,6 +44,12 @@ export const createCategory = async (req, res) => {
       displayOrder: displayOrder ?? 0,
       minItems: isBaseOrComplemento ? (minItems ?? 0) : 0,
       maxItems: isBaseOrComplemento ? (maxItems ?? null) : null,
+      discountType: discountType || 'none',
+      discountValue: parseInt(discountValue) || 0,
+      discountActive: !!discountActive,
+      isAccumulable: !!isAccumulable,
+      discountExpirationDate: discountExpirationDate || null,
+      discountActiveDays: Array.isArray(discountActiveDays) ? discountActiveDays : null,
     });
 
     // Registrar auditoría
@@ -53,7 +59,7 @@ export const createCategory = async (req, res) => {
       "categories",
       newCategory.id,
       null,
-      { name: name.trim(), behavior: behavior || "independiente" }
+      { name: name.trim(), behavior: behavior || "independiente", discountType: discountType || 'none' }
     );
 
     res.status(201).json(newCategory);
@@ -72,14 +78,14 @@ export const createCategory = async (req, res) => {
 export const updateCategory = async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, behavior, displayOrder, isActive, minItems, maxItems } = req.body;
+    const { name, behavior, displayOrder, isActive, minItems, maxItems, discountType, discountValue, discountActive, isAccumulable, discountExpirationDate, discountActiveDays } = req.body;
 
     const category = await Category.findByPk(id);
     if (!category) {
       return res.status(404).json({ error: "Categoría no encontrada" });
     }
 
-    const oldData = { name: category.name, behavior: category.behavior, displayOrder: category.displayOrder, isActive: category.isActive, minItems: category.minItems, maxItems: category.maxItems };
+    const oldData = { name: category.name, behavior: category.behavior, displayOrder: category.displayOrder, isActive: category.isActive, minItems: category.minItems, maxItems: category.maxItems, discountType: category.discountType, discountValue: category.discountValue, discountActive: category.discountActive, isAccumulable: category.isAccumulable };
 
     if (name !== undefined) category.name = name.trim();
     if (behavior !== undefined) category.behavior = behavior;
@@ -91,6 +97,14 @@ export const updateCategory = async (req, res) => {
     if (minItems !== undefined) category.minItems = isBaseOrComplemento ? minItems : 0;
     if (maxItems !== undefined) category.maxItems = isBaseOrComplemento ? maxItems : null;
 
+    // Discount fields
+    if (discountType !== undefined) category.discountType = discountType;
+    if (discountValue !== undefined) category.discountValue = parseInt(discountValue) || 0;
+    if (discountActive !== undefined) category.discountActive = discountActive;
+    if (isAccumulable !== undefined) category.isAccumulable = isAccumulable;
+    if (discountExpirationDate !== undefined) category.discountExpirationDate = discountExpirationDate || null;
+    if (discountActiveDays !== undefined) category.discountActiveDays = Array.isArray(discountActiveDays) ? discountActiveDays : null;
+
     await category.save();
 
     // Registrar auditoría
@@ -100,7 +114,7 @@ export const updateCategory = async (req, res) => {
       "categories",
       id,
       oldData,
-      { name: category.name, behavior: category.behavior, displayOrder: category.displayOrder, isActive: category.isActive }
+      { name: category.name, behavior: category.behavior, displayOrder: category.displayOrder, isActive: category.isActive, discountType: category.discountType, discountValue: category.discountValue, discountActive: category.discountActive }
     );
 
     res.json(category);

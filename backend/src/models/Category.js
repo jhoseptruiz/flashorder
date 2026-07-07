@@ -35,7 +35,35 @@ const Category = sequelize.define("Category", {
     type: DataTypes.BOOLEAN,
     defaultValue: true,
     allowNull: false,
-  }
+  },
+  discountType: {
+    type: DataTypes.ENUM('none', 'percentage', 'fixed'),
+    defaultValue: 'none',
+    allowNull: false,
+  },
+  discountValue: {
+    type: DataTypes.INTEGER,
+    defaultValue: 0,
+    allowNull: false,
+  },
+  discountActive: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false,
+    allowNull: false,
+  },
+  isAccumulable: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false,
+    allowNull: false,
+  },
+  discountExpirationDate: {
+    type: DataTypes.DATE,
+    allowNull: true,
+  },
+  discountActiveDays: {
+    type: DataTypes.JSON, // Will store array of numbers 0-6 (Sun-Sat)
+    allowNull: true,
+  },
 }, {
   tableName: "categories",
 });
