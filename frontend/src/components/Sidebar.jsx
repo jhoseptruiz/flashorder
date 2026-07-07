@@ -7,7 +7,7 @@ import { useCashRegister } from "../context/CashRegisterContext";
 export const NAV = [
   { icon: "ti-layout-dashboard", label: "Dashboard",           key: "dashboard", roles: ["admin", "empleado"] },
   { icon: "ti-shopping-cart",    label: "Punto de Venta",      key: "pos",       roles: ["admin", "empleado"] },
-  { icon: "ti-chef-hat",         label: "Cocina",              key: "kitchen",   roles: ["admin", "cocinero"] },
+  { icon: "ti-chef-hat",         label: "Producción",          key: "kitchen",   roles: ["admin", "cocinero"] },
   { icon: "ti-calendar",         label: "Pedidos y Calendario", key: "orders",    roles: ["admin", "empleado", "cocinero"] },
   { icon: "ti-category",         label: "Catálogo de Menú",    key: "catalogo",  roles: ["admin"] },
   { icon: "ti-receipt",          label: "Boletas y Facturas",  key: "invoices",  roles: ["admin", "empleado"] },
@@ -72,6 +72,7 @@ export default function Sidebar({ isOpen = false, onClose = () => {} }) {
       }
     } catch (e) {
       showToast(e.message, "error");
+    } finally {
       setSubmitting(false);
     }
   };
@@ -219,7 +220,7 @@ export default function Sidebar({ isOpen = false, onClose = () => {} }) {
               <div style={{ fontSize: 13, fontWeight: 500, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                 {user?.name || user?.full_name || user?.email || "Usuario"}
               </div>
-              <div style={{ fontSize: 11, color: "var(--text2)" }}>{user?.role}</div>
+              <div style={{ fontSize: 11, color: "var(--text2)" }}>{user?.role === "cocinero" ? "producción" : user?.role}</div>
             </div>
           </div>
           <button className="nav-item danger" onClick={handleLogoutClick}>
@@ -475,6 +476,7 @@ export default function Sidebar({ isOpen = false, onClose = () => {} }) {
                       setShowCloseModal(false);
                       setClosingCashInput("");
                       setCloseNotes("");
+                      setSubmitting(false);
                       if (pendingLogout) {
                         setPendingLogout(false);
                         logout();

@@ -6,9 +6,9 @@ import { apiFetch } from "../utils/apiFetch";
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
 
 const BEHAVIOR_MAP = {
-  independiente: { label: "Independiente", color: "#6366f1", bg: "#eef2ff" },
-  base:          { label: "Base",          color: "#d97706", bg: "#fffbeb" },
-  complemento:   { label: "Complemento",   color: "#0891b2", bg: "#ecfeff" },
+  independiente: { label: "Independiente", sigla: "I", color: "#6366f1", bg: "#eef2ff" },
+  base:          { label: "Base",          sigla: "B", color: "#d97706", bg: "#fffbeb" },
+  complemento:   { label: "Complemento",   sigla: "C", color: "#0891b2", bg: "#ecfeff" },
 };
 
 // ════════════════════════════════════════════════════
@@ -28,7 +28,14 @@ export default function Catalogo() {
   // UI
   const [activeTab, setActiveTab] = useState("productos");
   const [searchTerm, setSearchTerm] = useState("");
+  const [filterBehavior, setFilterBehavior] = useState("");
   const [filterCategory, setFilterCategory] = useState("");
+
+  // Categories filtered by selected behavior (for the category dropdown)
+  const behaviorFilteredCategories = useMemo(() => {
+    if (!filterBehavior) return categorias;
+    return categorias.filter((c) => c.behavior === filterBehavior);
+  }, [categorias, filterBehavior]);
 
   // Modals
   const [catModal, setCatModal] = useState({ open: false, data: null });
@@ -69,6 +76,10 @@ export default function Catalogo() {
   // ─── Filtered products (memo) ─────────────────────
   const filteredProducts = useMemo(() => {
     let list = productos;
+    if (filterBehavior) {
+      const catIdsOfBehavior = categorias.filter((c) => c.behavior === filterBehavior).map((c) => c.id);
+      list = list.filter((p) => catIdsOfBehavior.includes(p.categoryId));
+    }
     if (filterCategory) {
       list = list.filter((p) => p.categoryId === filterCategory);
     }
@@ -77,7 +88,7 @@ export default function Catalogo() {
       list = list.filter((p) => p.name.toLowerCase().includes(term));
     }
     return list;
-  }, [productos, filterCategory, searchTerm]);
+  }, [productos, categorias, filterBehavior, filterCategory, searchTerm]);
 
   // ─── Category CRUD ────────────────────────────────
   const openCatCreate = () =>
@@ -200,6 +211,23 @@ export default function Catalogo() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Error al eliminar");
       showToast("Producto eliminado", "success");
+      fetchData();
+    } catch (err) {
+      showToast(err.message, "error");
+    }
+  };
+
+  // ─── Toggle product active ─────────────────────────────
+  const toggleProductActive = async (prod) => {
+    try {
+      const url = `${API_URL}/api/catalog/products/${prod.id}`;
+      const res = await apiFetch(url, {
+        method: "PUT",
+        body: JSON.stringify({ isActive: !prod.isActive }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Error al cambiar estado");
+      showToast(prod.isActive ? "Producto desactivado" : "Producto activado", "success");
       fetchData();
     } catch (err) {
       showToast(err.message, "error");
@@ -355,7 +383,7 @@ export default function Catalogo() {
         <>
           {/* Search + Filter bar */}
           <div style={{ display: "flex", gap: 12, marginBottom: 24, flexWrap: "wrap" }}>
-            <div style={{ position: "relative", flex: "1 1 280px" }}>
+            <div style={{ position: "relative", flex: "1 1 240px" }}>
               <i className="ti ti-search" style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", fontSize: 17, color: "var(--text2)" }} />
               <input
                 className="input-field"
@@ -367,14 +395,26 @@ export default function Catalogo() {
             </div>
             <select
               className="input-field"
+              value={filterBehavior}
+              onChange={(e) => { setFilterBehavior(e.target.value); setFilterCategory(""); }}
+              style={{ flex: "0 1 190px" }}
+            >
+              <option value="">Todos los tipos</option>
+              <option value="independiente">I — Independiente</option>
+              <option value="base">B — Base</option>
+              <option value="complemento">C — Complemento</option>
+            </select>
+            <select
+              className="input-field"
               value={filterCategory}
               onChange={(e) => setFilterCategory(e.target.value)}
-              style={{ flex: "0 1 240px" }}
+              style={{ flex: "0 1 220px" }}
             >
               <option value="">Todas las categorías</option>
-              {categorias.map((c) => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
+              {behaviorFilteredCategories.map((c) => {
+                const beh = BEHAVIOR_MAP[c.behavior] || BEHAVIOR_MAP.independiente;
+                return <option key={c.id} value={c.id}>[{beh.sigla}] {c.name}</option>;
+              })}
             </select>
           </div>
 
@@ -382,8 +422,8 @@ export default function Catalogo() {
           {filteredProducts.length === 0 ? (
             <EmptyState
               icon="ti-package-off"
-              title={searchTerm || filterCategory ? "Sin resultados" : "No hay productos"}
-              subtitle={searchTerm || filterCategory ? "Intenta con otro filtro o búsqueda" : "Crea tu primer producto para comenzar"}
+              title={searchTerm || filterCategory || filterBehavior ? "Sin resultados" : "No hay productos"}
+              subtitle={searchTerm || filterCategory || filterBehavior ? "Intenta con otro filtro o búsqueda" : "Crea tu primer producto para comenzar"}
             />
           ) : (
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 16 }}>
@@ -395,6 +435,7 @@ export default function Catalogo() {
                   primary={primary}
                   onEdit={() => openProdEdit(prod)}
                   onDelete={() => deleteProd(prod)}
+                  onToggleActive={() => toggleProductActive(prod)}
                 />
               ))}
             </div>
@@ -542,15 +583,16 @@ function EmptyState({ icon, title, subtitle }) {
 }
 
 // ─── Product Card ──────────────────────────────────────
-function ProductCard({ product, categorias, primary, onEdit, onDelete }) {
+function ProductCard({ product, categorias, primary, onEdit, onDelete, onToggleActive }) {
   const cat = categorias.find((c) => c.id === product.categoryId);
   const catName = cat?.name || "Sin categoría";
+  const beh = cat ? BEHAVIOR_MAP[cat.behavior] || BEHAVIOR_MAP.independiente : BEHAVIOR_MAP.independiente;
   const variants = product.variants || [];
   const minPrice = variants.length > 0 ? Math.min(...variants.map((v) => v.price)) : 0;
   const maxPrice = variants.length > 0 ? Math.max(...variants.map((v) => v.price)) : 0;
 
   return (
-    <div className="card" style={{ padding: 0, overflow: "hidden", display: "flex", flexDirection: "column", transition: "box-shadow 0.2s" }}>
+    <div className="card" style={{ padding: 0, overflow: "hidden", display: "flex", flexDirection: "column", transition: "box-shadow 0.2s", opacity: product.isActive ? 1 : 0.65 }}>
       {/* Card header */}
       <div style={{ padding: "18px 20px 14px", flex: 1 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
@@ -563,18 +605,20 @@ function ProductCard({ product, categorias, primary, onEdit, onDelete }) {
             </h3>
           </div>
           <div style={{ display: "flex", gap: 4, flexShrink: 0, marginLeft: 8 }}>
+            {/* Behavior sigla badge */}
+            <span style={{
+              display: "inline-flex", alignItems: "center", justifyContent: "center",
+              width: 22, height: 22, borderRadius: 6, fontSize: 11, fontWeight: 800,
+              background: beh.bg, color: beh.color, border: `1.5px solid ${beh.color}30`,
+              letterSpacing: 0, lineHeight: 1,
+            }} title={beh.label}>
+              {beh.sigla}
+            </span>
             {product.isComposite && (
               <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 10, fontWeight: 700, padding: "3px 8px", borderRadius: 999, background: "#fef3c7", color: "#92400e" }}>
                 <i className="ti ti-puzzle" style={{ fontSize: 12 }} /> Compuesto
               </span>
             )}
-            <span style={{
-              fontSize: 10, fontWeight: 700, padding: "3px 8px", borderRadius: 999,
-              background: product.isActive ? "#dcfce7" : "#fee2e2",
-              color: product.isActive ? "#15803d" : "#dc2626",
-            }}>
-              {product.isActive ? "Activo" : "Inactivo"}
-            </span>
           </div>
         </div>
 
@@ -608,7 +652,23 @@ function ProductCard({ product, categorias, primary, onEdit, onDelete }) {
             ? `$${minPrice.toLocaleString("es-CL")}`
             : `$${minPrice.toLocaleString("es-CL")} – $${maxPrice.toLocaleString("es-CL")}`}
         </div>
-        <div style={{ display: "flex", gap: 6 }}>
+        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+          {/* Toggle active */}
+          <button
+            onClick={onToggleActive}
+            title={product.isActive ? "Desactivar producto" : "Activar producto"}
+            style={{
+              ...btnSmall,
+              padding: "5px 10px",
+              color: product.isActive ? "#15803d" : "#dc2626",
+              borderColor: product.isActive ? "#86efac" : "#fca5a5",
+              background: product.isActive ? "#f0fdf4" : "#fef2f2",
+              transition: "all 0.2s",
+            }}
+          >
+            <i className={`ti ${product.isActive ? "ti-eye" : "ti-eye-off"}`} style={{ fontSize: 15 }} />
+            {product.isActive ? "Activo" : "Inactivo"}
+          </button>
           <button onClick={onEdit} style={btnSmall}>
             <i className="ti ti-edit" style={{ fontSize: 15 }} /> Editar
           </button>
@@ -960,6 +1020,22 @@ function ProductModal({ data, categorias, primary, primaryLight, onClose, onSave
               <p style={{ fontSize: 11, color: "var(--text2)", marginTop: 6 }}>
                 <i className="ti ti-info-circle" style={{ fontSize: 13 }} /> Define a qué producto independiente pertenece este ingrediente/base (ej: ingredientes de Pizza vs Hamburguesa).
               </p>
+            </div>
+          )}
+
+          {/* isActive toggle (only on edit) */}
+          {isEdit && (
+            <div style={{ background: "var(--surface2)", borderRadius: 10, padding: "14px 18px" }}>
+              <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", fontSize: 14, fontWeight: 500, color: "var(--text)" }}>
+                <input
+                  type="checkbox"
+                  checked={form.isActive !== undefined ? form.isActive : true}
+                  onChange={(e) => setForm({ ...form, isActive: e.target.checked })}
+                  style={{ width: 18, height: 18, accentColor: primary }}
+                />
+                <i className={`ti ${form.isActive !== false ? "ti-eye" : "ti-eye-off"}`} style={{ fontSize: 18, color: form.isActive !== false ? "#15803d" : "#dc2626" }} />
+                {form.isActive !== false ? "Producto activo (visible en el menú)" : "Producto inactivo (oculto del menú)"}
+              </label>
             </div>
           )}
 

@@ -1,10 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useTheme } from "../context/ThemeContext";
 import { apiFetch } from "../utils/apiFetch";
 
 const ROLES = {
   empleado: { label: "Empleado", color: "#f9c7d1" },
-  cocinero: { label: "Cocinero", color: "#ffe3b3" },
+  cocinero: { label: "Producción", color: "#ffe3b3" },
 };
 
 const EMPTY_FORM = {
@@ -67,6 +67,12 @@ export default function Usuarios() {
   const [passwordStatus, setPasswordStatus] = useState({ message: "", type: "" });
   const [showPassword, setShowPassword] = useState(false);
 
+  // Shifts state
+  const [activeTab, setActiveTab] = useState("usuarios");
+  const [shifts, setShifts] = useState([]);
+  const [shiftsLoading, setShiftsLoading] = useState(false);
+  const [shiftFilter, setShiftFilter] = useState("");
+
   const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
 
   const fetchUsers = async () => {
@@ -91,6 +97,73 @@ export default function Usuarios() {
     fetchUsers();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // ─── Fetch shifts ─────────────────────────────────
+  const fetchShifts = async () => {
+    try {
+      setShiftsLoading(true);
+      const response = await apiFetch(`/api/cash-register/sessions`);
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No se pudieron cargar los turnos");
+      setShifts(Array.isArray(data) ? data : []);
+    } catch (error) {
+      showToast(error.message, "error");
+      setShifts([]);
+    } finally {
+      setShiftsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === "turnos" && shifts.length === 0) fetchShifts();
+  }, [activeTab]);
+
+  // ─── Shift computations ─────────────────────────────
+  const uniqueEmployees = useMemo(() => {
+    const map = new Map();
+    shifts.forEach((s) => {
+      if (s.OpenedBy && !map.has(s.OpenedBy.rut)) {
+        map.set(s.OpenedBy.rut, s.OpenedBy);
+      }
+    });
+    return Array.from(map.values());
+  }, [shifts]);
+
+  const filteredShifts = useMemo(() => {
+    if (!shiftFilter) return shifts;
+    return shifts.filter((s) => s.openedByRut === shiftFilter);
+  }, [shifts, shiftFilter]);
+
+  const shiftSummary = useMemo(() => {
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const dayOfWeek = now.getDay() === 0 ? 6 : now.getDay() - 1; // Monday=0
+    const weekStart = new Date(todayStart);
+    weekStart.setDate(weekStart.getDate() - dayOfWeek);
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    let dailyMs = 0, weeklyMs = 0, monthlyMs = 0;
+
+    filteredShifts.forEach((s) => {
+      if (!s.closingDate) return;
+      const open = new Date(s.openingDate);
+      const close = new Date(s.closingDate);
+      const duration = close - open;
+      if (duration <= 0) return;
+
+      if (open >= todayStart) dailyMs += duration;
+      if (open >= weekStart) weeklyMs += duration;
+      if (open >= monthStart) monthlyMs += duration;
+    });
+
+    const toHours = (ms) => {
+      const h = Math.floor(ms / 3600000);
+      const m = Math.floor((ms % 3600000) / 60000);
+      return `${h}h ${m}m`;
+    };
+
+    return { daily: toHours(dailyMs), weekly: toHours(weeklyMs), monthly: toHours(monthlyMs) };
+  }, [filteredShifts]);
 
   const cleanInputRut = (value) => normalizeRut(value);
 
@@ -383,6 +456,34 @@ export default function Usuarios() {
         </button>
       </div>
 
+      {/* ─── Tabs ────────────────────────────────────── */}
+      <div style={{ display: "flex", gap: 0, borderBottom: "2px solid var(--border)", marginBottom: 24 }}>
+        {["usuarios", "turnos"].map((tab) => (
+          <button
+            key={tab}
+            onClick={() => setActiveTab(tab)}
+            style={{
+              padding: "11px 22px",
+              fontSize: 14,
+              fontWeight: activeTab === tab ? 700 : 500,
+              color: activeTab === tab ? primary : "var(--text2)",
+              background: "transparent",
+              border: "none",
+              borderBottom: activeTab === tab ? `3px solid ${primary}` : "3px solid transparent",
+              cursor: "pointer",
+              transition: "all 0.18s",
+              fontFamily: "DM Sans, sans-serif",
+              marginBottom: -2,
+            }}
+          >
+            {tab === "usuarios" ? "Gestión de Usuarios" : "Horario de Turnos"}
+          </button>
+        ))}
+      </div>
+
+      {activeTab === "usuarios" && (
+      <>
+
       {isModalOpen && (
         <div
           style={{
@@ -411,7 +512,7 @@ export default function Usuarios() {
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
               <div>
                 <h2 style={{ fontSize: 19, fontWeight: 700, color: "var(--text)", margin: 0 }}>{editingRut ? "Editar usuario" : "Agregar nuevo usuario"}</h2>
-                <p style={{ fontSize: 12, color: "var(--text2)", marginTop: 5 }}>Solo se permiten usuarios con rol empleado o cocinero</p>
+                <p style={{ fontSize: 12, color: "var(--text2)", marginTop: 5 }}>Solo se permiten usuarios con rol empleado o producción</p>
               </div>
 
               <button
@@ -487,7 +588,7 @@ export default function Usuarios() {
                   onChange={handleChange}
                 >
                   <option value="empleado">Empleado</option>
-                  <option value="cocinero">Cocinero</option>
+                  <option value="cocinero">Producción</option>
                 </select>
               </label>
 
@@ -594,7 +695,7 @@ export default function Usuarios() {
         <section className="card" style={{ padding: 16 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
             <div>
-              <h3 style={{ fontSize: 16, fontWeight: 700, color: "var(--text)", margin: 0 }}>Cocineros</h3>
+              <h3 style={{ fontSize: 16, fontWeight: 700, color: "var(--text)", margin: 0 }}>Producción</h3>
               <p style={{ fontSize: 12, color: "var(--text2)", marginTop: 3 }}>{cocineros.length} usuarios</p>
             </div>
           </div>
@@ -602,7 +703,7 @@ export default function Usuarios() {
           {loading ? (
             <div style={{ color: "var(--text2)", fontSize: 13 }}>Cargando usuarios...</div>
           ) : cocineros.length === 0 ? (
-            <div style={{ color: "var(--text2)", fontSize: 13 }}>No hay cocineros registrados.</div>
+            <div style={{ color: "var(--text2)", fontSize: 13 }}>No hay personal de producción registrado.</div>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               {cocineros.map((user) => (
@@ -612,6 +713,140 @@ export default function Usuarios() {
           )}
         </section>
       </div>
+      </>
+      )}
+
+      {/* ─── Tab: Horario de Turnos ─────────────────── */}
+      {activeTab === "turnos" && (
+        <div>
+          {/* Filter bar */}
+          <div style={{ display: "flex", gap: 12, marginBottom: 20, flexWrap: "wrap", alignItems: "center" }}>
+            <select
+              className="input-field"
+              value={shiftFilter}
+              onChange={(e) => setShiftFilter(e.target.value)}
+              style={{ flex: "0 1 280px" }}
+            >
+              <option value="">Todos los cajeros</option>
+              {uniqueEmployees.map((emp) => (
+                <option key={emp.rut} value={emp.rut}>{emp.fullName} ({emp.rut})</option>
+              ))}
+            </select>
+            <button
+              onClick={fetchShifts}
+              style={{
+                background: "transparent", border: "1px solid var(--border)", borderRadius: 10,
+                padding: "10px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer",
+                color: "var(--text)", display: "inline-flex", alignItems: "center", gap: 6,
+              }}
+            >
+              <i className="ti ti-refresh" style={{ fontSize: 16 }} /> Actualizar
+            </button>
+          </div>
+
+          {/* Summary cards */}
+          {(shiftFilter || filteredShifts.length > 0) && (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12, marginBottom: 24 }}>
+              <div className="card" style={{ padding: "16px 20px", display: "flex", alignItems: "center", gap: 12 }}>
+                <div style={{ width: 40, height: 40, borderRadius: 10, background: "#dbeafe", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <i className="ti ti-clock-hour-4" style={{ fontSize: 20, color: "#2563eb" }} />
+                </div>
+                <div>
+                  <div style={{ fontSize: 11, color: "var(--text2)", fontWeight: 600, textTransform: "uppercase" }}>Hoy</div>
+                  <div style={{ fontSize: 20, fontWeight: 800, color: "var(--text)" }}>{shiftSummary.daily}</div>
+                </div>
+              </div>
+              <div className="card" style={{ padding: "16px 20px", display: "flex", alignItems: "center", gap: 12 }}>
+                <div style={{ width: 40, height: 40, borderRadius: 10, background: "#ede9fe", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <i className="ti ti-calendar-week" style={{ fontSize: 20, color: "#7c3aed" }} />
+                </div>
+                <div>
+                  <div style={{ fontSize: 11, color: "var(--text2)", fontWeight: 600, textTransform: "uppercase" }}>Semana</div>
+                  <div style={{ fontSize: 20, fontWeight: 800, color: "var(--text)" }}>{shiftSummary.weekly}</div>
+                </div>
+              </div>
+              <div className="card" style={{ padding: "16px 20px", display: "flex", alignItems: "center", gap: 12 }}>
+                <div style={{ width: 40, height: 40, borderRadius: 10, background: "#fef3c7", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <i className="ti ti-calendar-month" style={{ fontSize: 20, color: "#d97706" }} />
+                </div>
+                <div>
+                  <div style={{ fontSize: 11, color: "var(--text2)", fontWeight: 600, textTransform: "uppercase" }}>Mes</div>
+                  <div style={{ fontSize: 20, fontWeight: 800, color: "var(--text)" }}>{shiftSummary.monthly}</div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Shifts table */}
+          {shiftsLoading ? (
+            <div style={{ color: "var(--text2)", fontSize: 13, textAlign: "center", padding: 40 }}>Cargando turnos...</div>
+          ) : filteredShifts.length === 0 ? (
+            <div style={{ color: "var(--text2)", fontSize: 13, textAlign: "center", padding: 40 }}>
+              <i className="ti ti-clock-off" style={{ fontSize: 40, display: "block", marginBottom: 8, opacity: 0.4 }} />
+              No hay turnos registrados{shiftFilter ? " para este empleado" : ""}.
+            </div>
+          ) : (
+            <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                  <thead>
+                    <tr style={{ background: "var(--surface2)", borderBottom: "1px solid var(--border)" }}>
+                      <th style={{ padding: "12px 16px", textAlign: "left", fontWeight: 700, color: "var(--text)", whiteSpace: "nowrap" }}>Empleado</th>
+                      <th style={{ padding: "12px 16px", textAlign: "left", fontWeight: 700, color: "var(--text)", whiteSpace: "nowrap" }}>Fecha</th>
+                      <th style={{ padding: "12px 16px", textAlign: "left", fontWeight: 700, color: "var(--text)", whiteSpace: "nowrap" }}>Entrada</th>
+                      <th style={{ padding: "12px 16px", textAlign: "left", fontWeight: 700, color: "var(--text)", whiteSpace: "nowrap" }}>Salida</th>
+                      <th style={{ padding: "12px 16px", textAlign: "left", fontWeight: 700, color: "var(--text)", whiteSpace: "nowrap" }}>Duración</th>
+                      <th style={{ padding: "12px 16px", textAlign: "center", fontWeight: 700, color: "var(--text)", whiteSpace: "nowrap" }}>Estado</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredShifts.map((s) => {
+                      const openDate = new Date(s.openingDate);
+                      const closeDate = s.closingDate ? new Date(s.closingDate) : null;
+                      const durationMs = closeDate ? closeDate - openDate : Date.now() - openDate;
+                      const dH = Math.floor(durationMs / 3600000);
+                      const dM = Math.floor((durationMs % 3600000) / 60000);
+
+                      return (
+                        <tr key={s.id} style={{ borderBottom: "1px solid var(--border)", transition: "background 0.15s" }}
+                          onMouseEnter={(e) => e.currentTarget.style.background = "var(--surface2)"}
+                          onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
+                        >
+                          <td style={{ padding: "12px 16px", whiteSpace: "nowrap" }}>
+                            <div style={{ fontWeight: 600, color: "var(--text)" }}>{s.OpenedBy?.fullName || "—"}</div>
+                            <div style={{ fontSize: 11, color: "var(--text2)" }}>{s.OpenedBy?.email}</div>
+                          </td>
+                          <td style={{ padding: "12px 16px", color: "var(--text2)", whiteSpace: "nowrap" }}>
+                            {openDate.toLocaleDateString("es-CL", { day: "2-digit", month: "2-digit", year: "numeric" })}
+                          </td>
+                          <td style={{ padding: "12px 16px", color: "var(--text)", fontWeight: 600, whiteSpace: "nowrap" }}>
+                            {openDate.toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit" })}
+                          </td>
+                          <td style={{ padding: "12px 16px", color: "var(--text)", fontWeight: 600, whiteSpace: "nowrap" }}>
+                            {closeDate ? closeDate.toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit" }) : "—"}
+                          </td>
+                          <td style={{ padding: "12px 16px", fontWeight: 700, color: "var(--text)", whiteSpace: "nowrap" }}>
+                            {dH}h {dM}m
+                          </td>
+                          <td style={{ padding: "12px 16px", textAlign: "center" }}>
+                            <span style={{
+                              fontSize: 10, fontWeight: 700, padding: "3px 10px", borderRadius: 999,
+                              background: s.status === "open" ? "#dcfce7" : "#f1f5f9",
+                              color: s.status === "open" ? "#15803d" : "#64748b",
+                            }}>
+                              {s.status === "open" ? "En turno" : "Cerrado"}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

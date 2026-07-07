@@ -45,6 +45,7 @@ export default function POS() {
   // Catálogo
   const [categories, setCategories]     = useState([]);
   const [products, setProducts]         = useState([]);
+  const [promotions, setPromotions]     = useState([]);
   const [activeCategory, setActiveCategory] = useState(null);
   const [search, setSearch]             = useState("");
   const [loadingCatalog, setLoadingCatalog] = useState(true);
@@ -91,14 +92,17 @@ export default function POS() {
     const load = async () => {
       try {
         setLoadingCatalog(true);
-        const [catRes, prodRes] = await Promise.all([
+        const [catRes, prodRes, promoRes] = await Promise.all([
           apiFetch("/api/catalog/categories"),
           apiFetch("/api/catalog/products"),
+          apiFetch("/api/catalog/promotions"),
         ]);
         const catData  = await catRes.json();
         const prodData = await prodRes.json();
+        const promoData = promoRes.ok ? await promoRes.json() : [];
         if (catRes.ok) setCategories(catData);
         if (prodRes.ok) setProducts(prodData);
+        setPromotions(Array.isArray(promoData) ? promoData.filter(p => p.isActive) : []);
       } catch (e) {
         console.error("Error cargando catálogo:", e);
       } finally {
@@ -139,13 +143,6 @@ export default function POS() {
   // Total del carrito
   const cartTotal = useMemo(() => cart.reduce((s, i) => s + i.subtotal, 0), [cart]);
 
-  const actualDeposit = useMemo(() => {
-    return deposit !== "" ? (parseInt(deposit) || 0) : cartTotal;
-  }, [deposit, cartTotal]);
-
-  const changeAmount = useMemo(() => {
-    return paymentMethod === "efectivo" && cashReceived !== "" ? Math.max(0, (parseInt(cashReceived) || 0) - actualDeposit) : 0;
-  }, [paymentMethod, cashReceived, actualDeposit]);
 
   // ── Calcular descuento de producto/categoría ────────────────────────────────
   const calcDiscountedPrice = (basePrice, product) => {
@@ -200,16 +197,110 @@ export default function POS() {
     return { finalPrice: basePrice - totalDiscount, discountAmount: totalDiscount, discountLabel: label };
   };
 
+  // ── Evaluar Promociones (Opción A) ──────────────────────────────────────────
+  const promotionDiscounts = useMemo(() => {
+    let totalPromoDiscount = 0;
+    const alerts = [];
+    const cartItems = [...cart]; // Copy to track which items were already discounted
+
+    for (const promo of promotions) {
+      console.log("[DEBUG PROMO]", { promoName: promo.name, cartQty: cart.length, conditionId: promo.conditionProductId, rewardId: promo.rewardProductId });
+      
+      if (promo.promotionType === 'bogo' && promo.conditionProductId) {
+        // Count how many condition items are in the cart
+        const conditionQty = cart.filter(i => i.productId === promo.conditionProductId).reduce((sum, i) => sum + i.quantity, 0);
+        console.log("[DEBUG BOGO]", { conditionQty, required: promo.conditionMinQuantity });
+        
+        if (conditionQty >= promo.conditionMinQuantity) {
+          const rewardsEarned = Math.floor(conditionQty / promo.conditionMinQuantity);
+          
+          if (rewardsEarned > 0 && promo.rewardProductId) {
+            // Find reward items in cart
+            const rewardItemsInCart = cart.filter(i => i.productId === promo.rewardProductId);
+            const rewardQtyInCart = rewardItemsInCart.reduce((sum, i) => sum + i.quantity, 0);
+
+            if (rewardQtyInCart < rewardsEarned) {
+              const missing = rewardsEarned - rewardQtyInCart;
+              alerts.push(`¡Promo desbloqueada! Agrega ${missing} ${promo.RewardProduct?.name || "producto de regalo"} para aplicar "${promo.name}".`);
+            }
+
+            // Apply discount to up to `rewardsEarned` items
+            let rewardsToDiscount = rewardsEarned;
+            for (const item of rewardItemsInCart) {
+              if (rewardsToDiscount <= 0) break;
+              
+              const qtyToDiscount = Math.min(item.quantity, rewardsToDiscount);
+              let discountPerItem = 0;
+              
+              if (promo.rewardDiscountType === 'free') {
+                discountPerItem = item.unitPrice; // Wait, unitPrice is already after product-level discounts. That's fine.
+              } else if (promo.rewardDiscountType === 'percentage') {
+                discountPerItem = Math.round(item.unitPrice * promo.rewardValue / 100);
+              } else if (promo.rewardDiscountType === 'fixed') {
+                discountPerItem = Math.min(promo.rewardValue, item.unitPrice);
+              }
+              
+              totalPromoDiscount += (discountPerItem * qtyToDiscount);
+              rewardsToDiscount -= qtyToDiscount;
+            }
+          }
+        }
+      } else if (promo.promotionType === 'threshold' && promo.conditionMinAmount) {
+        if (cartTotal >= promo.conditionMinAmount) {
+          if (promo.rewardProductId) {
+            const rewardItemsInCart = cart.filter(i => i.productId === promo.rewardProductId);
+            if (rewardItemsInCart.length === 0) {
+              alerts.push(`¡Promo desbloqueada! Agrega 1 ${promo.RewardProduct?.name || "producto de regalo"} para aplicar "${promo.name}".`);
+            } else {
+              // Apply discount to 1 item
+              const item = rewardItemsInCart[0];
+              let discountPerItem = 0;
+              if (promo.rewardDiscountType === 'free') {
+                discountPerItem = item.unitPrice;
+              } else if (promo.rewardDiscountType === 'percentage') {
+                discountPerItem = Math.round(item.unitPrice * promo.rewardValue / 100);
+              } else if (promo.rewardDiscountType === 'fixed') {
+                discountPerItem = Math.min(promo.rewardValue, item.unitPrice);
+              }
+              totalPromoDiscount += discountPerItem;
+            }
+          } else {
+            // General cart discount
+             let discount = 0;
+             if (promo.rewardDiscountType === 'percentage') {
+               discount = Math.round(cartTotal * promo.rewardValue / 100);
+             } else if (promo.rewardDiscountType === 'fixed') {
+               discount = Math.min(promo.rewardValue, cartTotal);
+             }
+             totalPromoDiscount += discount;
+          }
+        }
+      }
+    }
+    
+    console.log("[DEBUG HOOK OUT]", { discount: Math.min(totalPromoDiscount, cartTotal), alerts });
+    return { discount: Math.min(totalPromoDiscount, cartTotal), alerts };
+  }, [cart, cartTotal, promotions]);
+
   // ── Calcular descuento de cupón al total ───────────────────────────────
   const couponDiscount = useMemo(() => {
     if (!appliedCoupon) return 0;
+    const sub = Math.max(0, cartTotal - promotionDiscounts.discount); // Apply coupon after promotions
     if (appliedCoupon.discountType === 'percentage') {
-      return Math.round(cartTotal * appliedCoupon.discountValue / 100);
+      return Math.round(sub * appliedCoupon.discountValue / 100);
     }
-    return Math.min(appliedCoupon.discountValue, cartTotal);
-  }, [appliedCoupon, cartTotal]);
+    return Math.min(appliedCoupon.discountValue, sub);
+  }, [appliedCoupon, cartTotal, promotionDiscounts.discount]);
 
-  const finalTotal = useMemo(() => Math.max(0, cartTotal - couponDiscount), [cartTotal, couponDiscount]);
+  const finalTotal = useMemo(() => Math.max(0, cartTotal - promotionDiscounts.discount - couponDiscount), [cartTotal, promotionDiscounts.discount, couponDiscount]);
+
+  const actualDeposit = useMemo(() => {
+    return deposit !== "" ? (parseInt(deposit) || 0) : finalTotal;
+  }, [deposit, finalTotal]);
+
+  const changeAmount = useMemo(() => {
+    return paymentMethod === "efectivo" && cashReceived !== "" ? Math.max(0, (parseInt(cashReceived) || 0) - actualDeposit) : 0;
+  }, [paymentMethod, cashReceived, actualDeposit]);
 
   // ── Validar cupón ──────────────────────────────────────────────
   const handleApplyCoupon = async () => {
@@ -315,6 +406,7 @@ export default function POS() {
         ...prev,
         {
           id: Date.now() + Math.random(),
+          productId: selectedProduct.id,
           productName: selectedProduct.name,
           variantName: variantDesc || "Personalizado",
           variantId: baseVariant?.id || null,
@@ -343,6 +435,7 @@ export default function POS() {
         ...prev,
         {
           id: Date.now() + Math.random(),
+          productId: selectedProduct.id,
           productName: selectedProduct.name,
           variantName: variant.variantName,
           variantId: variant.id,
@@ -429,12 +522,13 @@ export default function POS() {
         deliveryDate: deliveryDate ? deliveryDate.toISOString() : null,
         depositAmount: actualDeposit,
         paymentMethod,
-        notes: "",
+        notes: promotionDiscounts.discount > 0 ? `Descuento Promociones: -${fmt(promotionDiscounts.discount)}` : "",
+        couponCode: appliedCoupon?.code || null,
+        globalDiscount: Math.round(promotionDiscounts.discount + couponDiscount),
         cashReceived: paymentMethod === "efectivo" ? (parseInt(cashReceived) || 0) : 0,
         cashChange: paymentMethod === "efectivo" ? Math.max(0, (parseInt(cashReceived) || 0) - actualDeposit) : 0,
         companyName: appName,
         companyLogo: appLogo,
-        couponCode: appliedCoupon ? appliedCoupon.code : null,
       };
 
       const res = await apiFetch("/api/pos/orders", {
@@ -650,6 +744,18 @@ export default function POS() {
           )}
         </div>
 
+        {/* Promotion alerts */}
+        {promotionDiscounts.alerts.length > 0 && (
+          <div style={{ padding: "0 20px 16px 20px", display: "flex", flexDirection: "column", gap: 8 }}>
+            {promotionDiscounts.alerts.map((alert, idx) => (
+              <div key={idx} style={{ padding: "8px 12px", background: "#f0fdf4", color: "#15803d", borderRadius: 8, fontSize: 12, fontWeight: 600, display: "flex", alignItems: "center", gap: 8, border: "1px solid #bbf7d0" }}>
+                <i className="ti ti-gift" style={{ fontSize: 16 }} />
+                {alert}
+              </div>
+            ))}
+          </div>
+        )}
+
         {/* Totales */}
         <div style={{ borderTop: "1px solid var(--border)", paddingTop: 12, display: "flex", flexDirection: "column", gap: 8 }}>
           
@@ -685,6 +791,12 @@ export default function POS() {
             <span>Subtotal</span>
             <span>{fmt(cartTotal)}</span>
           </div>
+          {promotionDiscounts.discount > 0 && (
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, color: "#15803d", fontWeight: 600 }}>
+              <span>Descuento Promociones</span>
+              <span>-{fmt(promotionDiscounts.discount)}</span>
+            </div>
+          )}
           {appliedCoupon && (
             <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, color: "#16a34a", fontWeight: 600 }}>
               <span>Cupón ({appliedCoupon.code})</span>
@@ -997,7 +1109,7 @@ export default function POS() {
                   </div>
                   <div style={{ display: "flex", justifyContent: "space-between", fontSize: 16, fontWeight: 700 }}>
                     <span>Total:</span>
-                    <span>{fmt(cartTotal)}</span>
+                    <span>{fmt(finalTotal)}</span>
                   </div>
                 </div>
               </div>

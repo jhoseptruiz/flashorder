@@ -4,6 +4,7 @@ import {
   openSession,
   closeSession,
   getSessionDetails,
+  getAllSessions,
 } from "../services/cashRegister.service.js";
 
 // ── Obtener sesión activa ─────────────────────────────────────────────────────
@@ -74,5 +75,16 @@ export async function getSessionDetailsController(req, res) {
   } catch (error) {
     console.error("Error en getSessionDetailsController:", error);
     res.status(500).json({ error: error.message || "Error al obtener detalles de la caja" });
+  }
+}
+
+// ── Obtener todas las sesiones (turnos) con datos del usuario ─────────────────
+export async function getAllSessionsController(req, res) {
+  try {
+    const sessions = await getAllSessions();
+    res.json(sessions);
+  } catch (error) {
+    console.error("Error en getAllSessionsController:", error);
+    res.status(500).json({ error: error.message || "Error al obtener las sesiones" });
   }
 }
