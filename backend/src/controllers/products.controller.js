@@ -2,6 +2,7 @@ import { Op } from "sequelize";
 import { Product, ProductVariant, Category } from "../models/index.models.js";
 import sequelize from "../db/db.js";
 import { createAuditLog } from "../helpers/audit.helper.js";
+import { triggerMenuSync } from "../services/uberEatsMenu.service.js";
 
 // GET 
 export const getProducts = async (req, res) => {
@@ -98,6 +99,9 @@ export const createProduct = async (req, res) => {
 
     res.status(201).json(fullProduct);
 
+    // Sincronizar menú con Uber Eats de forma asíncrona
+    triggerMenuSync();
+
     // Registrar auditoría (después de responder para no retrasar)
     await createAuditLog(
       req.user.rut,
@@ -189,6 +193,9 @@ export const updateProduct = async (req, res) => {
 
     res.json(fullProduct);
 
+    // Sincronizar menú con Uber Eats de forma asíncrona
+    triggerMenuSync();
+
     // Registrar auditoría
     await createAuditLog(
       req.user.rut,
@@ -229,6 +236,9 @@ export const deleteProduct = async (req, res) => {
     );
 
     res.json({ message: "Producto eliminado correctamente" });
+
+    // Sincronizar menú con Uber Eats de forma asíncrona
+    triggerMenuSync();
   } catch (error) {
     res.status(500).json({ error: "Error al eliminar producto", details: error.message });
   }

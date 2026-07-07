@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useTheme } from "../context/ThemeContext";
+import { useAuth } from "../context/AuthContext";
 import { apiFetch } from "../utils/apiFetch";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
@@ -168,11 +169,18 @@ function MiniCalendar({ pendingByDay, year, month, onNavigate }) {
 // ── Componente principal Dashboard ────────────────────────────────────────────
 export default function Home() {
   const { primary } = useTheme();
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
   const [period, setPeriod] = useState("daily");
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState(null);
   const [calYear, setCalYear] = useState(() => new Date().getFullYear());
   const [calMonth, setCalMonth] = useState(() => new Date().getMonth() + 1);
+
+  // ── Uber Eats Store Status ──
+  const [uberStatus, setUberStatus] = useState(null); // "ONLINE" | "PAUSED" | null
+  const [uberLoading, setUberLoading] = useState(false);
+  const [uberSyncing, setUberSyncing] = useState(false);
 
   const fetchData = useCallback(async (p, cy, cm) => {
     setLoading(true);
@@ -192,6 +200,51 @@ export default function Home() {
   useEffect(() => {
     fetchData(period, calYear, calMonth);
   }, [period, calYear, calMonth, fetchData]);
+
+  // ── Cargar estado de Uber Eats (solo admin) ──
+  useEffect(() => {
+    if (!isAdmin) return;
+    (async () => {
+      try {
+        const res = await apiFetch("/api/uber/store/status");
+        if (res.ok) {
+          const json = await res.json();
+          setUberStatus(json.status || "ONLINE");
+        }
+      } catch (e) {
+        console.error("Error cargando estado Uber:", e);
+      }
+    })();
+  }, [isAdmin]);
+
+  const handleUberToggle = async () => {
+    const newStatus = uberStatus === "ONLINE" ? "PAUSED" : "ONLINE";
+    setUberLoading(true);
+    try {
+      const res = await apiFetch("/api/uber/store/status", {
+        method: "POST",
+        body: JSON.stringify({ status: newStatus }),
+      });
+      if (res.ok) {
+        setUberStatus(newStatus);
+      }
+    } catch (e) {
+      console.error("Error cambiando estado Uber:", e);
+    } finally {
+      setUberLoading(false);
+    }
+  };
+
+  const handleUberMenuSync = async () => {
+    setUberSyncing(true);
+    try {
+      await apiFetch("/api/uber/menu/sync", { method: "POST" });
+    } catch (e) {
+      console.error("Error sincronizando menú:", e);
+    } finally {
+      setUberSyncing(false);
+    }
+  };
 
   const handleCalendarNavigate = (dir) => {
     let newMonth = calMonth + dir;
@@ -517,6 +570,83 @@ export default function Home() {
           </div>
         )}
       </div>
+
+      {/* ── Uber Eats Control Panel (solo Admin) ── */}
+      {isAdmin && (
+        <div className="card" style={{ padding: 24, marginTop: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 16 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <div style={{
+                width: 44, height: 44, borderRadius: 12,
+                background: "linear-gradient(135deg, #1db954, #06d6a0)",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                flexShrink: 0,
+              }}>
+                <i className="ti ti-brand-uber" style={{ fontSize: 22, color: "#fff" }} />
+              </div>
+              <div>
+                <h2 style={{ fontSize: 17, fontWeight: 700, color: "var(--text)", fontFamily: "Syne, sans-serif", margin: 0 }}>
+                  Uber Eats
+                </h2>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 2 }}>
+                  <span style={{
+                    width: 8, height: 8, borderRadius: 999,
+                    background: uberStatus === "ONLINE" ? "#10b981" : uberStatus === "PAUSED" ? "#f59e0b" : "#6b7280",
+                    display: "inline-block",
+                    boxShadow: uberStatus === "ONLINE" ? "0 0 8px rgba(16,185,129,0.5)" : "none",
+                  }} />
+                  <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text2)" }}>
+                    {uberStatus === "ONLINE" ? "Tienda Activa" : uberStatus === "PAUSED" ? "Tienda Pausada" : "Cargando..."}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+              {/* Toggle Pausar / Activar */}
+              <button
+                onClick={handleUberToggle}
+                disabled={uberLoading || !uberStatus}
+                style={{
+                  padding: "10px 20px", borderRadius: 10, border: "none",
+                  background: uberStatus === "ONLINE"
+                    ? "linear-gradient(135deg, #f59e0b, #f97316)"
+                    : "linear-gradient(135deg, #10b981, #059669)",
+                  color: "#fff", fontWeight: 700, fontSize: 13,
+                  cursor: uberLoading ? "not-allowed" : "pointer",
+                  opacity: uberLoading ? 0.6 : 1,
+                  display: "flex", alignItems: "center", gap: 8,
+                  transition: "all 0.2s ease",
+                  fontFamily: "'DM Sans', sans-serif",
+                }}
+              >
+                <i className={`ti ${uberStatus === "ONLINE" ? "ti-player-pause" : "ti-player-play"}`} style={{ fontSize: 16 }} />
+                {uberLoading ? "Cambiando..." : uberStatus === "ONLINE" ? "Pausar Tienda" : "Activar Tienda"}
+              </button>
+
+              {/* Sync Menú */}
+              <button
+                onClick={handleUberMenuSync}
+                disabled={uberSyncing}
+                style={{
+                  padding: "10px 20px", borderRadius: 10,
+                  border: "1px solid var(--border)",
+                  background: "transparent",
+                  color: "var(--text)", fontWeight: 600, fontSize: 13,
+                  cursor: uberSyncing ? "not-allowed" : "pointer",
+                  opacity: uberSyncing ? 0.6 : 1,
+                  display: "flex", alignItems: "center", gap: 8,
+                  transition: "all 0.2s ease",
+                  fontFamily: "'DM Sans', sans-serif",
+                }}
+              >
+                <i className={`ti ti-refresh ${uberSyncing ? "ti-loader" : ""}`} style={{ fontSize: 16 }} />
+                {uberSyncing ? "Sincronizando..." : "Sincronizar Menú"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

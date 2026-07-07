@@ -1,5 +1,6 @@
 import { Category, Product } from "../models/index.models.js";
 import { createAuditLog } from "../helpers/audit.helper.js";
+import { triggerMenuSync } from "../services/uberEatsMenu.service.js";
 
 // GET /api/catalog/categories
 export const getCategories = async (req, res) => {
@@ -56,6 +57,9 @@ export const createCategory = async (req, res) => {
     );
 
     res.status(201).json(newCategory);
+
+    // Sincronizar menú con Uber Eats de forma asíncrona
+    triggerMenuSync();
   } catch (error) {
     if (error.name === "SequelizeUniqueConstraintError") {
       return res.status(409).json({ error: "Ya existe una categoría con ese nombre" });
@@ -100,6 +104,9 @@ export const updateCategory = async (req, res) => {
     );
 
     res.json(category);
+
+    // Sincronizar menú con Uber Eats de forma asíncrona
+    triggerMenuSync();
   } catch (error) {
     if (error.name === "SequelizeUniqueConstraintError") {
       return res.status(409).json({ error: "Ya existe una categoría con ese nombre" });
@@ -139,6 +146,9 @@ export const deleteCategory = async (req, res) => {
     );
 
     res.json({ message: "Categoría eliminada correctamente" });
+
+    // Sincronizar menú con Uber Eats de forma asíncrona
+    triggerMenuSync();
   } catch (error) {
     res.status(500).json({ error: "Error al eliminar categoría", details: error.message });
   }

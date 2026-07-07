@@ -79,6 +79,26 @@ export async function updateOrderStatus(orderId, newStatus) {
       throw new Error(`Estado inválido: ${newStatus}`);
     }
 
+    // ── Notificar a Uber Eats si el pedido viene de esa plataforma ──────────
+    if (order.source === "uber_eats" && order.externalOrderId) {
+      try {
+        const { acceptOrder, denyOrder } = await import("./uberEatsApi.service.js");
+
+        if (newStatus === "pendiente" && order.status === "pendiente_uber") {
+          // Aceptar pedido en Uber
+          const result = await acceptOrder(order.externalOrderId);
+          console.log(`[Orders] Uber accept → ${result.status}`);
+        } else if (newStatus === "rechazado") {
+          // Rechazar pedido en Uber
+          const result = await denyOrder(order.externalOrderId);
+          console.log(`[Orders] Uber deny → ${result.status}`);
+        }
+      } catch (uberErr) {
+        // No bloquear el cambio de estado local si Uber falla
+        console.error("[Orders] Error notificando a Uber Eats:", uberErr.message);
+      }
+    }
+
     order.status = newStatus;
     await order.save();
 
