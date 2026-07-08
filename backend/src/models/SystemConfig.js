@@ -18,6 +18,10 @@ const SystemConfig = sequelize.define("SystemConfig", {
   },
   backupEmail: {
     type: DataTypes.STRING,
+  },
+  businessHours: {
+    type: DataTypes.JSON,
+    allowNull: true,
   }
 }, {
   tableName: "system_configs",

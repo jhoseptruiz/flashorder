@@ -7,8 +7,9 @@ import { HOST, PORT } from "./config/configEnv.js";
 import indexRoutes from "./routes/index.routes.js";
 import sequelize from "./db/db.js"; 
 import "./models/index.models.js"; 
-import { createInitialUsers } from "./config/initialSetup.js";
-import { createInitialOrders } from "./config/intialSeptupOrder.js";
+import { seedDatabase } from "./config/seed_final.js";
+import User from "./models/User.js";
+
 
 async function setupServer() {
   try {
@@ -88,8 +89,13 @@ async function setupAPI() {
     await sequelize.sync();
     console.log("=> Modelos sincronizados con la base de datos");
 
-    await createInitialUsers();
-    await createInitialOrders();
+    // Revisar si la base de datos está vacía para poblarla automáticamente
+    const userCount = await User.count();
+    if (userCount === 0) {
+      console.log("=> Base de datos vacía. Ejecutando seed automático...");
+      await seedDatabase();
+    }
+
     await setupServer();
   } catch (error) {
     console.log("Error crítico en setupAPI():", error);

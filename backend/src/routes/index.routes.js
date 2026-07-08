@@ -12,6 +12,7 @@ import auditLogsRoutes from "./auditLogs.routes.js";
 import cashRegisterRoutes from "./cashRegister.routes.js";
 import webhookRoutes from "./webhook.routes.js";
 import uberRoutes from "./uber.routes.js";
+import configRoutes from "./config.routes.js";
 import { getDashboardStatsController } from "../controllers/dashboard.controller.js";
 
 const router = Router();
@@ -32,6 +33,7 @@ router.use("/audit-logs", auditLogsRoutes);
 router.use("/cash-register", cashRegisterRoutes);
 router.use("/webhook", webhookRoutes);
 router.use("/uber", uberRoutes);
+router.use("/config", configRoutes);
 
 // Ruta protegida del dashboard (admin y empleado)
 router.get("/dashboard-stats", authenticate, authorizeRoles("admin", "empleado"), getDashboardStatsController);

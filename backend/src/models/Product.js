@@ -28,6 +28,12 @@ const Product = sequelize.define("Product", {
     allowNull: true,
     defaultValue: null,
   },
+  baseCategoryId: {
+    type: DataTypes.UUID,
+    allowNull: true,
+    defaultValue: null,
+  },
+
   discountType: {
     type: DataTypes.ENUM('none', 'percentage', 'fixed'),
     defaultValue: 'none',

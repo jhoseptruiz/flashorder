@@ -46,7 +46,7 @@ export default function Login() {
       }
 
       // Guardar token en localStorage
-      localStorage.setItem("accessToken", data.accessToken);
+      localStorage.setItem("accessToken", data.token);
 
       const normalizedUser = {
         ...data.user,
@@ -73,7 +73,7 @@ export default function Login() {
   };
 
   return (
-    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, animation: "fadein 0.4s ease" }}>
+    <div style={{ minHeight: "100dvh", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, animation: "fadein 0.4s ease" }}>
       <div style={{ width: "100%", maxWidth: 420 }}>
 
         {/* Header */}

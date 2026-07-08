@@ -1,13 +1,24 @@
 "use strict";
 import { createOrder, getCompositionRules } from "../services/pos.service.js";
+import { createAuditLog } from "../helpers/audit.helper.js";
 
 export async function createOrderController(req, res) {
   try {
-    const { customer, items, deliveryDate, depositAmount, paymentMethod, notes, companyName, companyLogo, cashReceived, cashChange, couponCode, globalDiscount } = req.body;
+    const { customer, items, deliveryDate, depositAmount, paymentMethod, notes, companyName, companyLogo, cashReceived, cashChange, couponCode, globalDiscount, status } = req.body;
 
     // Validaciones básicas
     if (!customer || !customer.fullName || !customer.phone) {
       return res.status(400).json({ error: "Nombre y teléfono del cliente son obligatorios" });
+    }
+
+    const nameRegex = /^[a-zA-Z\sñÑáéíóúÁÉÍÓÚ]+$/;
+    if (!nameRegex.test(customer.fullName)) {
+      return res.status(400).json({ error: "El nombre solo debe contener letras" });
+    }
+
+    const phoneRegex = /^\d+$/;
+    if (!phoneRegex.test(customer.phone)) {
+      return res.status(400).json({ error: "El teléfono solo debe contener números" });
     }
 
     if (!items || !Array.isArray(items) || items.length === 0) {
@@ -43,7 +54,22 @@ export async function createOrderController(req, res) {
       cashChange: cashChange ? parseInt(cashChange) : 0,
       couponCode,
       globalDiscount: globalDiscount ? parseInt(globalDiscount) : 0,
+      status,
     });
+
+    await createAuditLog(
+      req.user.rut,
+      "CREATE_ORDER",
+      "customer_orders",
+      order.id,
+      null,
+      { 
+        totalAmount: order.totalAmount, 
+        customerName: customer.fullName, 
+        itemsCount: items.length, 
+        paymentMethod 
+      }
+    );
 
     res.status(201).json({
       message: "Pedido creado correctamente",

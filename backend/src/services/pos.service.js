@@ -22,6 +22,7 @@ export async function createOrder({
   cashChange = 0,
   couponCode = null,
   globalDiscount = 0,
+  status = "pendiente",
 }) {
   const transaction = await sequelize.transaction();
 
@@ -109,7 +110,7 @@ export async function createOrder({
         companyName: companyName || null,
         companyLogo: companyLogo || null,
         source: "local",
-        status: "pendiente",
+        status: status || "pendiente",
         notes: orderNotes,
         cashReceived: finalCashReceived,
         cashChange: finalCashChange,
@@ -127,6 +128,7 @@ export async function createOrder({
       quantity: item.quantity,
       unitPrice: item.unitPrice,
       subtotal: item.quantity * item.unitPrice,
+      components: item.components || null,
     }));
 
     await OrderItem.bulkCreate(orderItems, { transaction });

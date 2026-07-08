@@ -1,20 +1,25 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { useTheme } from "../context/ThemeContext";
 import { useAuth } from "../context/AuthContext";
 import { useCashRegister } from "../context/CashRegisterContext";
 
 export const NAV = [
-  { icon: "ti-layout-dashboard", label: "Dashboard",           key: "dashboard", roles: ["admin", "empleado"] },
-  { icon: "ti-shopping-cart",    label: "Punto de Venta",      key: "pos",       roles: ["admin", "empleado"] },
-  { icon: "ti-chef-hat",         label: "Producción",          key: "kitchen",   roles: ["admin", "cocinero"] },
-  { icon: "ti-calendar",         label: "Pedidos y Calendario", key: "orders",    roles: ["admin", "empleado", "cocinero"] },
-  { icon: "ti-category",         label: "Catálogo de Menú",    key: "catalogo",  roles: ["admin"] },
-  { icon: "ti-receipt",          label: "Boletas y Facturas",  key: "invoices",  roles: ["admin", "empleado"] },
-  { icon: "ti-users",            label: "Usuarios",            key: "usuarios",  roles: ["admin"] },
-  { icon: "ti-user",             label: "Perfil",              key: "perfil",     roles: ["admin", "empleado", "cocinero"] },
-  { icon: "ti-clipboard-list",   label: "Auditoría",           key: "auditoria",  roles: ["admin", "empleado", "cocinero"] },
-  { icon: "ti-settings",         label: "Configuración",       key: "config",    roles: ["admin"] },
+  // Administración
+  { icon: "ti-layout-dashboard", label: "Dashboard",           key: "dashboard", roles: ["admin"], section: "Administración", sectionIcon: "ti-shield" },
+  { icon: "ti-category",         label: "Catálogo de Menú",    key: "catalogo",  roles: ["admin"], section: "Administración" },
+  { icon: "ti-users",            label: "Usuarios",            key: "usuarios",  roles: ["admin"], section: "Administración" },
+  { icon: "ti-clipboard-list",   label: "Auditoría",           key: "auditoria", roles: ["admin", "empleado", "cocinero"], section: "Administración" },
+  { icon: "ti-settings",         label: "Configuración",       key: "config",    roles: ["admin"], section: "Administración" },
+
+  // Producción
+  { icon: "ti-chef-hat",         label: "Producción",          key: "kitchen",   roles: ["admin", "cocinero"], section: "Producción", sectionIcon: "ti-tools-kitchen-2" },
+
+  // Empleado
+  { icon: "ti-calendar",         label: "Pedidos y Calendario", key: "orders",    roles: ["admin", "empleado"], section: "Empleado", sectionIcon: "ti-user" },
+  { icon: "ti-shopping-cart",    label: "Punto de Venta",      key: "pos",       roles: ["admin", "empleado"], section: "Empleado" },
+  { icon: "ti-receipt",          label: "Boletas y Facturas",  key: "invoices",  roles: ["admin", "empleado"], section: "Empleado" },
+  { icon: "ti-user",             label: "Perfil",              key: "perfil",     roles: ["admin", "empleado", "cocinero"], section: "Empleado" },
 ];
 
 const fmt = (n) => `$${Number(n || 0).toLocaleString("es-CL")}`;
@@ -37,6 +42,25 @@ export default function Sidebar({ isOpen = false, onClose = () => {} }) {
 
   const showCashRegister = user?.role === "admin" || user?.role === "empleado";
   const isOpen_ = !!activeSession;
+
+  // ── Estado de secciones colapsables (solo admin) ────────────────────────
+  const [collapsedSections, setCollapsedSections] = useState(() => {
+    try {
+      const saved = localStorage.getItem("sidebarCollapsed");
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  });
+
+  const toggleSection = (sectionName) => {
+    if (user?.role !== "admin") return;
+    setCollapsedSections(prev => {
+      const next = { ...prev, [sectionName]: !prev[sectionName] };
+      localStorage.setItem("sidebarCollapsed", JSON.stringify(next));
+      return next;
+    });
+  };
 
   // ── Handlers ────────────────────────────────────────────────────────────
   const handleOpen = async () => {
@@ -142,22 +166,103 @@ export default function Sidebar({ isOpen = false, onClose = () => {} }) {
         </div>
 
         {/* Nav */}
-        <nav className="sidebar-nav" style={{ flex: 1, display: "flex", flexDirection: "column", gap: 2 }}>
-          {NAV.filter(n => !n.roles || n.roles.includes(user?.role)).map((n) => {
-            const path = `/${n.key}`;
-            const isActive = location.pathname.startsWith(path);
-            return (
-              <Link
-                key={n.key}
-                to={path}
-                className={`nav-item${isActive ? " active" : ""}`}
-                style={{ textDecoration: "none" }}
-              >
-                <i className={`ti ${n.icon}`} style={{ fontSize: 18 }} />
-                {n.label}
-              </Link>
-            );
-          })}
+        <nav className="sidebar-nav" style={{ flex: 1, display: "flex", flexDirection: "column", gap: 4 }}>
+          {(() => {
+            const visibleItems = NAV.filter(n => !n.roles || n.roles.includes(user?.role));
+            
+            // Si NO es admin, retornamos lista plana
+            if (user?.role !== "admin") {
+              return (
+                <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                  {visibleItems.map(n => {
+                    const path = `/${n.key}`;
+                    const isActive = location.pathname.startsWith(path);
+                    return (
+                      <Link
+                        key={n.key}
+                        to={path}
+                        className={`nav-item${isActive ? " active" : ""}`}
+                        style={{ textDecoration: "none" }}
+                      >
+                        <i className={`ti ${n.icon}`} style={{ fontSize: 18 }} />
+                        {n.label}
+                      </Link>
+                    );
+                  })}
+                </div>
+              );
+            }
+
+            // Si ES admin, agrupamos por secciones
+            const sections = [];
+            const sectionMap = {};
+            
+            visibleItems.forEach(n => {
+              if (!sectionMap[n.section]) {
+                sectionMap[n.section] = { name: n.section, icon: n.sectionIcon, items: [] };
+                sections.push(sectionMap[n.section]);
+              }
+              sectionMap[n.section].items.push(n);
+            });
+
+            return sections.map((sec, i) => {
+              const isCollapsed = collapsedSections[sec.name];
+              return (
+                <div key={sec.name} style={{ marginBottom: i === sections.length - 1 ? 0 : 12 }}>
+                  <div 
+                    onClick={() => toggleSection(sec.name)}
+                    style={{ 
+                      fontSize: 10, 
+                      fontWeight: 700, 
+                      textTransform: "uppercase", 
+                      letterSpacing: "0.5px", 
+                      color: "var(--text2)", 
+                      padding: "4px 10px", 
+                      marginBottom: 6,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      cursor: "pointer",
+                      borderRadius: 6,
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.background = "var(--surface2)"}
+                    onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      {sec.icon && <i className={`ti ${sec.icon}`} style={{ fontSize: 13, opacity: 0.7 }} />}
+                      {sec.name}
+                    </div>
+                    <i className={`ti ti-chevron-${isCollapsed ? "right" : "down"}`} style={{ fontSize: 12, opacity: 0.6 }} />
+                  </div>
+                  <div style={{ 
+                    display: "flex", 
+                    flexDirection: "column", 
+                    gap: 2,
+                    maxHeight: isCollapsed ? 0 : "500px",
+                    overflow: "hidden",
+                    transition: "max-height 0.3s ease-in-out",
+                    opacity: isCollapsed ? 0 : 1,
+                  }}>
+                    {sec.items.map(n => {
+                      const path = `/${n.key}`;
+                      const isActive = location.pathname.startsWith(path);
+                      return (
+                        <Link
+                          key={n.key}
+                          to={path}
+                          className={`nav-item${isActive ? " active" : ""}`}
+                          style={{ textDecoration: "none" }}
+                        >
+                          <i className={`ti ${n.icon}`} style={{ fontSize: 18 }} />
+                          {n.label}
+                        </Link>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            });
+          })()}
         </nav>
 
         {/* ── Tarjeta estado de caja ── */}
@@ -220,7 +325,7 @@ export default function Sidebar({ isOpen = false, onClose = () => {} }) {
               <div style={{ fontSize: 13, fontWeight: 500, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                 {user?.name || user?.full_name || user?.email || "Usuario"}
               </div>
-              <div style={{ fontSize: 11, color: "var(--text2)" }}>{user?.role === "cocinero" ? "producción" : user?.role}</div>
+              <div style={{ fontSize: 11, color: "var(--text2)" }}>{user?.role === "cocinero" ? "Producción" : user?.role}</div>
             </div>
           </div>
           <button className="nav-item danger" onClick={handleLogoutClick}>

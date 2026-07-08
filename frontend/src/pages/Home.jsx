@@ -284,7 +284,8 @@ export default function Home() {
       `}</style>
 
       {/* ── Header ── */}
-      <div className="page-header" style={{ marginBottom: 24 }}>
+      {/* ── Header ── */}
+      <div className="page-header" style={{ marginBottom: 24, display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 16 }}>
         <div>
           <h1 style={{ fontSize: 24, fontWeight: 800, color: "var(--text)", fontFamily: "Syne, sans-serif", margin: 0 }}>
             Dashboard
@@ -293,6 +294,78 @@ export default function Home() {
             Resumen general de ventas y operaciones
           </p>
         </div>
+
+        {/* ── Uber Eats Control Panel (solo Admin) ── */}
+        {isAdmin && (
+          <div className="card" style={{ padding: "12px 16px", display: "flex", alignItems: "center", gap: 16 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <div style={{
+                width: 32, height: 32, borderRadius: 8,
+                background: "linear-gradient(135deg, #1db954, #06d6a0)",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                flexShrink: 0,
+              }}>
+                <i className="ti ti-brand-uber" style={{ fontSize: 18, color: "#fff" }} />
+              </div>
+              <div>
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: "var(--text)", fontFamily: "Syne, sans-serif" }}>
+                    Uber Eats
+                  </span>
+                  <span style={{
+                    width: 6, height: 6, borderRadius: 999,
+                    background: uberStatus === "ONLINE" ? "#10b981" : uberStatus === "PAUSED" ? "#f59e0b" : "#6b7280",
+                    display: "inline-block",
+                    boxShadow: uberStatus === "ONLINE" ? "0 0 6px rgba(16,185,129,0.5)" : "none",
+                  }} />
+                </div>
+                <span style={{ fontSize: 11, fontWeight: 600, color: "var(--text2)" }}>
+                  {uberStatus === "ONLINE" ? "Activa" : uberStatus === "PAUSED" ? "Pausada" : "Cargando..."}
+                </span>
+              </div>
+            </div>
+
+            <div style={{ width: 1, height: 24, background: "var(--border)" }} />
+
+            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+              <button
+                onClick={handleUberToggle}
+                disabled={uberLoading || !uberStatus}
+                title={uberStatus === "ONLINE" ? "Pausar Tienda" : "Activar Tienda"}
+                style={{
+                  width: 32, height: 32, borderRadius: 8, border: "none",
+                  background: uberStatus === "ONLINE"
+                    ? "rgba(249,115,22,0.1)"
+                    : "rgba(16,185,129,0.1)",
+                  color: uberStatus === "ONLINE" ? "#f97316" : "#10b981",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  cursor: uberLoading ? "not-allowed" : "pointer",
+                  opacity: uberLoading ? 0.6 : 1,
+                  transition: "all 0.2s ease",
+                }}
+              >
+                <i className={`ti ${uberStatus === "ONLINE" ? "ti-player-pause" : "ti-player-play"}`} style={{ fontSize: 16 }} />
+              </button>
+
+              <button
+                onClick={handleUberMenuSync}
+                disabled={uberSyncing}
+                title="Sincronizar Menú"
+                style={{
+                  width: 32, height: 32, borderRadius: 8, border: "1px solid var(--border)",
+                  background: "transparent",
+                  color: "var(--text)",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  cursor: uberSyncing ? "not-allowed" : "pointer",
+                  opacity: uberSyncing ? 0.6 : 1,
+                  transition: "all 0.2s ease",
+                }}
+              >
+                <i className={`ti ti-refresh ${uberSyncing ? "ti-loader" : ""}`} style={{ fontSize: 16 }} />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ── Summary Cards ── */}
@@ -571,82 +644,7 @@ export default function Home() {
         )}
       </div>
 
-      {/* ── Uber Eats Control Panel (solo Admin) ── */}
-      {isAdmin && (
-        <div className="card" style={{ padding: 24, marginTop: 0 }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 16 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              <div style={{
-                width: 44, height: 44, borderRadius: 12,
-                background: "linear-gradient(135deg, #1db954, #06d6a0)",
-                display: "flex", alignItems: "center", justifyContent: "center",
-                flexShrink: 0,
-              }}>
-                <i className="ti ti-brand-uber" style={{ fontSize: 22, color: "#fff" }} />
-              </div>
-              <div>
-                <h2 style={{ fontSize: 17, fontWeight: 700, color: "var(--text)", fontFamily: "Syne, sans-serif", margin: 0 }}>
-                  Uber Eats
-                </h2>
-                <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 2 }}>
-                  <span style={{
-                    width: 8, height: 8, borderRadius: 999,
-                    background: uberStatus === "ONLINE" ? "#10b981" : uberStatus === "PAUSED" ? "#f59e0b" : "#6b7280",
-                    display: "inline-block",
-                    boxShadow: uberStatus === "ONLINE" ? "0 0 8px rgba(16,185,129,0.5)" : "none",
-                  }} />
-                  <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text2)" }}>
-                    {uberStatus === "ONLINE" ? "Tienda Activa" : uberStatus === "PAUSED" ? "Tienda Pausada" : "Cargando..."}
-                  </span>
-                </div>
-              </div>
-            </div>
 
-            <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-              {/* Toggle Pausar / Activar */}
-              <button
-                onClick={handleUberToggle}
-                disabled={uberLoading || !uberStatus}
-                style={{
-                  padding: "10px 20px", borderRadius: 10, border: "none",
-                  background: uberStatus === "ONLINE"
-                    ? "linear-gradient(135deg, #f59e0b, #f97316)"
-                    : "linear-gradient(135deg, #10b981, #059669)",
-                  color: "#fff", fontWeight: 700, fontSize: 13,
-                  cursor: uberLoading ? "not-allowed" : "pointer",
-                  opacity: uberLoading ? 0.6 : 1,
-                  display: "flex", alignItems: "center", gap: 8,
-                  transition: "all 0.2s ease",
-                  fontFamily: "'DM Sans', sans-serif",
-                }}
-              >
-                <i className={`ti ${uberStatus === "ONLINE" ? "ti-player-pause" : "ti-player-play"}`} style={{ fontSize: 16 }} />
-                {uberLoading ? "Cambiando..." : uberStatus === "ONLINE" ? "Pausar Tienda" : "Activar Tienda"}
-              </button>
-
-              {/* Sync Menú */}
-              <button
-                onClick={handleUberMenuSync}
-                disabled={uberSyncing}
-                style={{
-                  padding: "10px 20px", borderRadius: 10,
-                  border: "1px solid var(--border)",
-                  background: "transparent",
-                  color: "var(--text)", fontWeight: 600, fontSize: 13,
-                  cursor: uberSyncing ? "not-allowed" : "pointer",
-                  opacity: uberSyncing ? 0.6 : 1,
-                  display: "flex", alignItems: "center", gap: 8,
-                  transition: "all 0.2s ease",
-                  fontFamily: "'DM Sans', sans-serif",
-                }}
-              >
-                <i className={`ti ti-refresh ${uberSyncing ? "ti-loader" : ""}`} style={{ fontSize: 16 }} />
-                {uberSyncing ? "Sincronizando..." : "Sincronizar Menú"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

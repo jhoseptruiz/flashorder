@@ -42,7 +42,7 @@ const CustomerOrder = sequelize.define("CustomerOrder", {
     type: DataTypes.STRING,
   },
   status: {
-    type: DataTypes.ENUM('pendiente_uber', 'pendiente', 'en_cocina', 'empacado', 'entregado'),
+    type: DataTypes.ENUM('pendiente_uber', 'pendiente', 'en_cocina', 'empacado', 'entregado', 'cancelado'),
     allowNull: false,
   },
   notes: {
@@ -58,6 +58,22 @@ const CustomerOrder = sequelize.define("CustomerOrder", {
     allowNull: true,
     defaultValue: 0,
   },
+  cancellationReason: {
+    type: DataTypes.STRING(255),
+    allowNull: true,
+    field: 'cancellation_reason'
+  },
+  isRefunded: {
+    type: DataTypes.BOOLEAN,
+    allowNull: false,
+    defaultValue: false,
+    field: 'is_refunded'
+  },
+  balancePaymentMethod: {
+    type: DataTypes.STRING(50),
+    allowNull: true,
+    field: 'balance_payment_method'
+  }
 }, {
   tableName: "customer_orders",
 });

@@ -163,22 +163,22 @@ export async function buildUberMenuPayload() {
  */
 export async function syncMenuToUber() {
   try {
-    console.log("[UberMenu] 🔄 Iniciando sincronización de menú...");
+    console.log("[UberMenu] Iniciando sincronización de menú...");
     const payload = await buildUberMenuPayload();
 
-    console.log(`[UberMenu] 📊 Payload: ${payload.categories.length} categorías, ${payload.items.length} items, ${payload.modifier_groups.length} modifier groups`);
+    console.log(`[UberMenu] Payload: ${payload.categories.length} categorías, ${payload.items.length} items, ${payload.modifier_groups.length} modifier groups`);
 
     const result = await uploadMenu(payload);
 
     if (result.ok) {
-      console.log("[UberMenu] ✅ Menú sincronizado exitosamente con Uber Eats");
+      console.log("[UberMenu] Menú sincronizado exitosamente con Uber Eats");
     } else {
-      console.error(`[UberMenu] ❌ Error sincronizando menú (${result.status}):`, result.data);
+      console.error(`[UberMenu] Error sincronizando menú (${result.status}):`, result.data);
     }
 
     return result;
   } catch (error) {
-    console.error("[UberMenu] ❌ Error en syncMenuToUber:", error.message);
+    console.error("[UberMenu] Error en syncMenuToUber:", error.message);
     throw error;
   }
 }

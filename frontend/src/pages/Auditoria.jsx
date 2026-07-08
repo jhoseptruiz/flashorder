@@ -10,11 +10,14 @@ const ACTION_MAP = {
   LOGOUT:         { label: "Cierre de sesión",      icon: "ti-logout",         color: "#64748b" },
   OPEN_REGISTER:  { label: "Inicio de turno",       icon: "ti-lock-open",      color: "#10b981" },
   CLOSE_REGISTER: { label: "Cierre de turno",       icon: "ti-lock",           color: "#f97316" },
+  CREATE_ORDER:   { label: "Pedido creado",         icon: "ti-shopping-cart",  color: "#22c55e" },
   CREATE:         { label: "Creación",              icon: "ti-plus",           color: "#22c55e" },
   UPDATE:         { label: "Edición",               icon: "ti-edit",           color: "#f59e0b" },
   UPDATE_STATUS:  { label: "Cambio de estado",      icon: "ti-arrows-exchange",color: "#8b5cf6" },
   UPDATE_PROFILE: { label: "Cambio de perfil",      icon: "ti-user-edit",      color: "#06b6d4" },
   DELETE:         { label: "Eliminación",           icon: "ti-trash",          color: "#ef4444" },
+  CANCEL_ORDER:   { label: "Cancelación de pedido", icon: "ti-ban",            color: "#ef4444" },
+  UPDATE_CANCEL_ORDER: { label: "Reembolso procesado", icon: "ti-receipt-refund", color: "#f59e0b" },
 };
 
 // ── Mapeo de tablas a nombres amigables ───────────────────────────────────
@@ -86,11 +89,33 @@ function buildDescription(log, isAdmin) {
       : "Cerraste turno (cerraste caja)";
   }
 
+  if (action === "CREATE_ORDER") {
+    const orderLabel = getOrderLabel(log);
+    const amount = log.newData?.totalAmount ? `$${Number(log.newData.totalAmount).toLocaleString("es-CL")}` : "$0";
+    const items = log.newData?.itemsCount || 0;
+    return `Creó el ${orderLabel} por ${amount} (${items} item${items !== 1 ? 's' : ''})`;
+  }
+
   if (action === "UPDATE_STATUS" && log.oldData?.status && log.newData?.status) {
     const from = STATUS_MAP[log.oldData.status] || log.oldData.status;
     const to = STATUS_MAP[log.newData.status] || log.newData.status;
     const orderLabel = getOrderLabel(log);
     return `Cambió estado del ${orderLabel} de "${from}" a "${to}"`;
+  }
+
+  if (action === "CANCEL_ORDER") {
+    const orderLabel = getOrderLabel(log);
+    const reason = log.newData?.reason || "Sin motivo";
+    return `Canceló el ${orderLabel} (Motivo: ${reason})`;
+  }
+
+  if (action === "UPDATE_CANCEL_ORDER") {
+    const orderLabel = getOrderLabel(log);
+    const isRefunded = log.newData?.isRefunded;
+    if (isRefunded) {
+      return `Registró la devolución del dinero del ${orderLabel}`;
+    }
+    return `Actualizó la información de cancelación del ${orderLabel}`;
   }
 
   if (action === "UPDATE_PROFILE") {
@@ -292,7 +317,7 @@ export default function Auditoria() {
               const isExpanded = expandedId === log.id;
               const userName = log.User?.fullName || log.userRut;
 
-              const canExpand = (log.tableAffected === "customer_orders" && log.action === "UPDATE_STATUS") || (log.action === "CLOSE_REGISTER");
+              const canExpand = (log.tableAffected === "customer_orders" && (log.action === "UPDATE_STATUS" || log.action === "CANCEL_ORDER" || log.action === "UPDATE_CANCEL_ORDER" || log.action === "CREATE_ORDER")) || (log.action === "CLOSE_REGISTER");
 
               return (
                 <div
@@ -513,13 +538,22 @@ function OrderTicket({ log, primary, onSelectBoleta }) {
             {order.OrderItems?.map((item) => {
               const name = item.productNameSnapshot || `${item.ProductVariant?.product?.name || "Producto"} - ${item.ProductVariant?.variantName || ""}`;
               return (
-                <div key={item.id} style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                  <span style={{ color: "var(--text)", flex: 1, paddingRight: 10 }}>
-                    {item.quantity}x {name}
-                  </span>
-                  <span style={{ color: "var(--text)" }}>
-                    ${(Number(item.unitPrice) * item.quantity).toLocaleString("es-CL")}
-                  </span>
+                <div key={item.id} style={{ marginBottom: 6 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between" }}>
+                    <span style={{ color: "var(--text)", flex: 1, paddingRight: 10 }}>
+                      {item.quantity}x {name}
+                    </span>
+                    <span style={{ color: "var(--text)" }}>
+                      ${(Number(item.unitPrice) * item.quantity).toLocaleString("es-CL")}
+                    </span>
+                  </div>
+                  {item.components && item.components.length > 0 && (
+                    <div style={{ paddingLeft: 12, fontSize: 11, color: "var(--text2)", fontStyle: "italic" }}>
+                      {item.components.map((c, i) => (
+                        <div key={i}>- {c.category}: {c.productName} ({c.variantName})</div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -544,10 +578,11 @@ function OrderTicket({ log, primary, onSelectBoleta }) {
                 e.stopPropagation();
                 const printWindow = window.open('', '_blank', 'width=600,height=600');
                 const itemsHtml = order.OrderItems?.map(item => `
-                  <div class="flex" style="margin-bottom: 6px;">
+                  <div class="flex" style="margin-bottom: 2px;">
                     <span>${item.quantity}x ${item.productNameSnapshot}</span>
                     <span>$${(Number(item.unitPrice) * item.quantity).toLocaleString("es-CL")}</span>
                   </div>
+                  ${item.components && item.components.length > 0 ? `<div style="padding-left: 12px; margin-bottom: 6px; font-size: 11px; font-style: italic;">` + item.components.map(c => `<div>- ${c.category}: ${c.productName} (${c.variantName})</div>`).join('') + `</div>` : '<div style="margin-bottom: 6px;"></div>'}
                 `).join('') || '';
 
                 printWindow.document.write(`
@@ -769,7 +804,7 @@ function ShiftReportTicket({ log, primary }) {
           paddingTop: 8, borderTop: "1px dashed var(--border)",
           wordBreak: "break-word", marginBottom: 12
         }}>
-          📝 Obs: {session.notes}
+          Obs: {session.notes}
         </div>
       )}
 

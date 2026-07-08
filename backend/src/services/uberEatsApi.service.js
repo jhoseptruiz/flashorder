@@ -50,6 +50,7 @@ export async function getAccessToken() {
 
   if (!res.ok) {
     const text = await res.text();
+    console.error("[UberAPI] Error obteniendo token:", text);
     throw new Error(`[UberAPI] Error obteniendo token (${res.status}): ${text}`);
   }
 
@@ -59,7 +60,7 @@ export async function getAccessToken() {
   const expiresInMs = (data.expires_in || 3600) * 1000;
   tokenExpiresAt = Date.now() + expiresInMs - 60_000;
 
-  console.log(`[UberAPI] ✅ Token obtenido, expira en ${data.expires_in}s`);
+  console.log(`[UberAPI] Token obtenido, expira en ${data.expires_in}s`);
   return cachedToken;
 }
 
@@ -92,7 +93,7 @@ export async function uberApiFetch(method, path, body = null) {
 
   // Si 401, forzar refresh del token e intentar una vez más
   if (res.status === 401) {
-    console.log("[UberAPI] ⚠️ Token rechazado (401), forzando refresh...");
+    console.log("[UberAPI] Token rechazado (401), forzando refresh...");
     cachedToken = null;
     tokenExpiresAt = 0;
     token = await getAccessToken();
@@ -109,7 +110,7 @@ export async function uberApiFetch(method, path, body = null) {
   }
 
   if (!res.ok) {
-    console.error(`[UberAPI] ❌ ${method} ${path} → ${res.status}`, data);
+    console.error(`[UberAPI] ${method} ${path} → ${res.status}`, data);
   }
 
   return { ok: res.ok, status: res.status, data };
@@ -122,7 +123,7 @@ export async function uberApiFetch(method, path, body = null) {
  * @param {string} externalOrderId — ID externo del pedido en Uber
  */
 export async function acceptOrder(externalOrderId) {
-  console.log(`[UberAPI] ✅ Aceptando pedido ${externalOrderId}...`);
+  console.log(`[UberAPI] Aceptando pedido ${externalOrderId}...`);
   return uberApiFetch("POST", `/eats/orders/${externalOrderId}/accept_pos_order`);
 }
 
@@ -133,7 +134,7 @@ export async function acceptOrder(externalOrderId) {
  * @param {string} code — Código de razón (STORE_CLOSED, POS_NOT_READY, POS_OFFLINE)
  */
 export async function denyOrder(externalOrderId, reason = "Rechazado por el local", code = "STORE_CLOSED") {
-  console.log(`[UberAPI] ❌ Rechazando pedido ${externalOrderId}...`);
+  console.log(`[UberAPI] Rechazando pedido ${externalOrderId}...`);
   return uberApiFetch("POST", `/eats/orders/${externalOrderId}/deny_pos_order`, {
     reason: {
       explanation: reason,

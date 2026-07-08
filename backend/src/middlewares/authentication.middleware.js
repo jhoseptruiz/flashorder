@@ -1,6 +1,7 @@
 "use strict";
 import { jwtVerify } from "jose";
 import { JWT_SECRET } from "../config/configEnv.js";
+import User from "../models/User.js";
 
 const ACCESS_SECRET = new TextEncoder().encode(JWT_SECRET);
 
@@ -17,9 +18,19 @@ export async function authenticate(req, res, next) {
       algorithms: ["HS256"],
     });
 
-    req.user = payload;
+    // Validar en la BD que el usuario siga existiendo y esté activo
+    const user = await User.findOne({
+      where: { rut: payload.rut, isActive: true },
+      attributes: ["rut", "role", "isActive"]
+    });
+
+    if (!user) {
+      return res.status(401).json({ error: "Usuario inactivo o no encontrado" });
+    }
+
+    req.user = { rut: user.rut, role: user.role };
     next();
-  } catch {
+  } catch (err) {
     return res.status(401).json({ error: "Token inválido o expirado" });
   }
 }

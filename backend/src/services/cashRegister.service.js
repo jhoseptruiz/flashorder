@@ -18,7 +18,7 @@ export async function getActiveSession() {
         include: [
           {
             model: CustomerOrder,
-            attributes: ["paymentMethod"],
+            attributes: ["paymentMethod", "balancePaymentMethod"],
           },
         ],
       },
@@ -44,7 +44,12 @@ function calculateCurrentCash(session) {
 
   if (plain.Transactions && Array.isArray(plain.Transactions)) {
     for (const tx of plain.Transactions) {
-      const paymentMethod = tx.CustomerOrder?.paymentMethod || "efectivo";
+      let paymentMethod = tx.CustomerOrder?.paymentMethod || "efectivo";
+      
+      if (tx.description && tx.description.startsWith("Saldo")) {
+        paymentMethod = tx.CustomerOrder?.balancePaymentMethod || "efectivo";
+      }
+
       if (paymentMethod === "efectivo") {
         const amount = Number(tx.amount) || 0;
         if (tx.type === "income") {
@@ -68,7 +73,12 @@ function calculatePaymentBreakdown(session) {
 
   if (plain.Transactions && Array.isArray(plain.Transactions)) {
     for (const tx of plain.Transactions) {
-      const paymentMethod = tx.CustomerOrder?.paymentMethod || "efectivo";
+      let paymentMethod = tx.CustomerOrder?.paymentMethod || "efectivo";
+      
+      if (tx.description && tx.description.startsWith("Saldo")) {
+        paymentMethod = tx.CustomerOrder?.balancePaymentMethod || "efectivo";
+      }
+
       const amount = Number(tx.amount) || 0;
       
       if (tx.type === "income") {

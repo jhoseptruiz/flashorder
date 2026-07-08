@@ -5,7 +5,7 @@ import { apiFetch } from "../utils/apiFetch";
 
 const STATUS_META = {
   pendiente: { label: "Pendiente", color: "#f59e0b", bg: "#fef3c7" },
-  en_cocina: { label: "En cocina", color: "#f97316", bg: "#ffedd5" },
+  en_cocina: { label: "En producción", color: "#f97316", bg: "#ffedd5" },
   empacado: { label: "Empacado", color: "#10b981", bg: "#dcfce7" },
   entregado: { label: "Entregado", color: "#6b7280", bg: "#f3f4f6" },
 };
@@ -49,6 +49,7 @@ export default function Cocina() {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [detailOrder, setDetailOrder] = useState(null);
+  const [showMobileCalendar, setShowMobileCalendar] = useState(false);
 
   const fetchOrders = useCallback(async () => {
     try {
@@ -92,6 +93,25 @@ export default function Cocina() {
 
       setOrders((prev) => prev.map((order) => (order.id === orderId ? { ...order, status: newStatus } : order)));
       showToast(`Orden marcada como ${getStatusLabel(newStatus)}`, "success");
+    } catch (error) {
+      showToast(error.message, "error");
+    }
+  };
+
+  const handleCancelOrder = async (orderId) => {
+    if (!window.confirm("¿Seguro que deseas cancelar este pedido? Se marcará como 'Cancelado por producción'.")) return;
+
+    try {
+      const response = await apiFetch(`/api/orders/${orderId}/cancel`, {
+        method: "POST",
+        body: JSON.stringify({ reason: "Cancelado por producción", isRefunded: false }),
+      });
+
+      if (!response.ok) throw new Error("No se pudo cancelar el pedido");
+
+      setOrders((prev) => prev.map((order) => (order.id === orderId ? { ...order, status: "cancelado" } : order)));
+      setDetailOrder(null);
+      showToast("Pedido cancelado correctamente", "success");
     } catch (error) {
       showToast(error.message, "error");
     }
@@ -179,6 +199,13 @@ export default function Cocina() {
           {order.OrderItems.map((item) => (
             <div key={item.id} style={{ marginTop: 4 }}>
               • {item.productNameSnapshot} (x{item.quantity})
+              {item.components && item.components.length > 0 && (
+                <div style={{ paddingLeft: 12, fontSize: 10, color: "var(--text2)", fontStyle: "italic" }}>
+                  {item.components.map((c, i) => (
+                    <div key={i}>- {c.category}: {c.productName} ({c.variantName})</div>
+                  ))}
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -186,7 +213,7 @@ export default function Cocina() {
 
       {order.notes && (
         <div style={{ fontSize: 11, color: "#e11d48", fontStyle: "italic", paddingTop: 4, borderTop: "1px solid var(--border)" }}>
-          📝 {order.notes}
+          Obs: {order.notes}
         </div>
       )}
 
@@ -261,14 +288,14 @@ export default function Cocina() {
   );
 
   return (
-    <div className="page-container" style={{ maxWidth: 1200, margin: "0 auto", animation: "fadein 0.3s ease", padding: "0 16px", minHeight: "calc(100vh - 64px)", display: "flex", flexDirection: "column" }}>
-      <div className="page-header" style={{ marginBottom: 20 }}>
+    <div className="page-container" style={{ maxWidth: 1200, margin: "0 auto", animation: "fadein 0.3s ease", height: "calc(100dvh - 64px)", display: "flex", flexDirection: "column" }}>
+      <div className="page-header" style={{ marginBottom: 16 }}>
         <div>
           <h1 style={{ fontFamily: "Syne, sans-serif", fontSize: 28, fontWeight: 700, color: "var(--text)", letterSpacing: "-0.3px" }}>
-            🍳 Cocina
+            Producción
           </h1>
           <p style={{ fontSize: 14, color: "var(--text2)", marginTop: 4 }}>
-            Gestión de órdenes en cocina
+            Gestión de órdenes en producción
           </p>
         </div>
       </div>
@@ -279,9 +306,22 @@ export default function Cocina() {
           <p style={{ marginTop: 12 }}>Cargando órdenes...</p>
         </div>
       ) : (
-        <div className="kitchen-layout" style={{ display: "grid", gridTemplateColumns: "1fr", gap: 20, flex: 1, minHeight: 0 }}>
-          <aside className="kitchen-sidebar" style={{ display: "flex", flexDirection: "column", gap: 16, minHeight: 0 }}>
-            <div className="card" style={{ padding: 16 }}>
+        <div className="kitchen-layout" style={{ display: "flex", gap: 20, flex: 1, minHeight: 0 }}>
+          <aside className="kitchen-sidebar" style={{ display: "flex", flexDirection: "column", gap: 14, minHeight: 0 }}>
+            {/* Botón para alternar calendario en móvil */}
+            <button
+              className="mobile-calendar-toggle"
+              onClick={() => setShowMobileCalendar(!showMobileCalendar)}
+              style={{
+                background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 10, padding: 12,
+                color: "var(--text)", fontWeight: 700, fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8
+              }}
+            >
+              <i className={`ti ${showMobileCalendar ? "ti-calendar-minus" : "ti-calendar-plus"}`} style={{ fontSize: 16, color: primary }} />
+              {showMobileCalendar ? "Ocultar Calendario" : "Mostrar Calendario"}
+            </button>
+
+            <div className={`card calendar-card ${showMobileCalendar ? "show" : ""}`} style={{ padding: 16 }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
                 <button
                   type="button"
@@ -407,7 +447,7 @@ export default function Cocina() {
               </button>
             </div>
 
-            <div className="card" style={{ padding: 16, flex: 1, overflowY: "auto", minHeight: 0 }}>
+            <div className="card pending-card" style={{ flex: 1, overflowY: "auto", minHeight: 0 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
                 <h3 style={{ fontSize: 15, fontWeight: 700, color: "var(--text)", margin: 0 }}>
                   Pendientes
@@ -432,10 +472,10 @@ export default function Cocina() {
             </div>
           </aside>
 
-          <div className="kitchen-main card" style={{ padding: 20, display: "flex", flexDirection: "column", minHeight: 0 }}>
+          <div className="kitchen-main card" style={{ flex: "1 1 50%", display: "flex", flexDirection: "column", minHeight: 0 }}>
             <div style={{ marginBottom: 14 }}>
               <h2 style={{ fontSize: 20, fontWeight: 700, color: "var(--text)", margin: 0, fontFamily: "Syne, sans-serif" }}>
-                En cocina
+                En producción
               </h2>
               <p style={{ fontSize: 12, color: "var(--text2)", marginTop: 4 }}>
                 {selectedDate.toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
@@ -446,7 +486,7 @@ export default function Cocina() {
               {kitchenOrders.length === 0 ? (
                 <div style={{ textAlign: "center", padding: "50px 20px", color: "var(--text2)" }}>
                   <i className="ti ti-calendar-off" style={{ fontSize: 36, display: "block", marginBottom: 10, opacity: 0.4 }} />
-                  <p style={{ fontSize: 13 }}>Sin órdenes en cocina</p>
+                  <p style={{ fontSize: 13 }}>Sin órdenes en producción</p>
                 </div>
               ) : (
                 <div style={{ display: "flex", flexDirection: "column" }}>
@@ -477,11 +517,11 @@ export default function Cocina() {
           onClick={() => setDetailOrder(null)}
         >
           <div
+            className="modal-content"
             style={{
               background: "var(--surface)",
               border: "1px solid var(--border)",
               borderRadius: 16,
-              padding: "28px 32px",
               width: "min(460px, 100%)",
               boxShadow: "0 28px 80px rgba(15, 23, 42, 0.32)",
               position: "relative",
@@ -540,8 +580,16 @@ export default function Cocina() {
               {(detailOrder.OrderItems || []).map((item) => (
                 <div key={item.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "start" }}>
                   <div>
-                    <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>{item.productNameSnapshot}</div>
-                    <div style={{ fontSize: 12, color: "var(--text2)" }}>{item.ProductVariant?.variantName || ""} {item.quantity > 1 ? `× ${item.quantity}` : ""}</div>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>{item.productNameSnapshot} {item.quantity > 1 ? `× ${item.quantity}` : ""}</div>
+                    {item.components && Array.isArray(item.components) && (
+                      <div style={{ marginLeft: 8, marginTop: 4, display: "flex", flexDirection: "column", gap: 2 }}>
+                        {item.components.map((c, idx) => (
+                          <div key={idx} style={{ fontSize: 11, color: "var(--text2)" }}>
+                            - {c.category}: {c.productName} ({c.variantName})
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                   <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text)", whiteSpace: "nowrap" }}>
                     {formatCLP(item.unitPrice * item.quantity)}
@@ -573,35 +621,118 @@ export default function Cocina() {
                 <span style={{ fontWeight: 800, color: primary }}>{formatCLP(detailOrder.totalAmount)}</span>
               </div>
             </div>
+
+            <div style={{ marginTop: 24, display: "flex", gap: 10 }}>
+              <button
+                type="button"
+                onClick={() => handleCancelOrder(detailOrder.id)}
+                style={{
+                  flex: 1,
+                  padding: "10px",
+                  borderRadius: 8,
+                  border: "1px solid #ef4444",
+                  background: "#fee2e2",
+                  color: "#ef4444",
+                  fontSize: 14,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                }}
+              >
+                Cancelar Pedido
+              </button>
+            </div>
           </div>
         </div>
       )}
 
       <style>{`
         .kitchen-layout {
-          display: block;
-          gap: 20px;
+          display: flex;
+          flex-direction: column;
+          gap: 16px;
           min-height: 0;
           width: 100%;
+          padding-bottom: 20px;
+          overflow: hidden;
         }
 
-        .kitchen-sidebar,
+        .kitchen-sidebar {
+          min-height: 0;
+          width: 100%;
+          display: flex;
+          flex-direction: column;
+          gap: 16px;
+          margin-bottom: 0;
+          flex: 1 1 50%;
+        }
+
         .kitchen-main {
           min-height: 0;
           width: 100%;
+          display: flex;
+          flex-direction: column;
+          gap: 16px;
+          margin-bottom: 16px;
+          flex: 1 1 50%;
+        }
+        
+        .mobile-calendar-toggle {
+          display: flex !important;
+        }
+        .calendar-card {
+          display: none;
+        }
+        .calendar-card.show {
           display: block;
+        }
+
+        .page-container {
+          padding: 0 16px;
+        }
+
+        .kitchen-main.card,
+        .pending-card {
+          padding: 16px;
+        }
+
+        .modal-content {
+          padding: 20px 16px;
         }
 
         @media (min-width: 768px) {
           .kitchen-layout {
-            display: grid;
-            grid-template-columns: 320px 1fr !important;
+            display: grid !important;
+            grid-template-columns: 1fr 1fr !important;
             gap: 20px;
+            margin-bottom: 0;
+            overflow: hidden;
           }
 
           .kitchen-sidebar,
           .kitchen-main {
+            flex: unset !important;
             height: 100%;
+            margin-bottom: 0;
+          }
+          
+          .mobile-calendar-toggle {
+            display: none !important;
+          }
+          .calendar-card {
+            display: block !important;
+          }
+
+          .page-container {
+            padding: 0 32px;
+          }
+
+          .kitchen-main.card,
+          .pending-card {
+            padding: 24px;
+          }
+
+          .modal-content {
+            padding: 28px 32px;
           }
         }
 

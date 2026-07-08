@@ -28,7 +28,7 @@ export async function getInvoices({ startDate, endDate, search, sortDirection = 
       },
       {
         model: OrderItem,
-        attributes: ["id", "quantity", "unitPrice", "subtotal", "productNameSnapshot", "groupId"],
+        attributes: ["id", "quantity", "unitPrice", "subtotal", "productNameSnapshot", "groupId", "components"],
         include: [
           {
             model: ProductVariant,

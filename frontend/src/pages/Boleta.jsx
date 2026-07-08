@@ -94,7 +94,16 @@ export default function Boleta({ order, onClose }) {
             <tbody>
               {order.OrderItems?.map((item) => (
                 <tr key={item.id}>
-                  <td style={{ padding: "12px 14px", borderBottom: "1px solid var(--border)", fontSize: 13, color: "var(--text)" }}>{item.productNameSnapshot}</td>
+                  <td style={{ padding: "12px 14px", borderBottom: "1px solid var(--border)", fontSize: 13, color: "var(--text)" }}>
+                    <div>{item.productNameSnapshot}</div>
+                    {item.components && item.components.length > 0 && (
+                      <div style={{ marginTop: 4, paddingLeft: 8, fontSize: 11, color: "var(--text2)", fontStyle: "italic" }}>
+                        {item.components.map((c, i) => (
+                          <div key={i}>- {c.productName} ({c.variantName})</div>
+                        ))}
+                      </div>
+                    )}
+                  </td>
                   <td style={{ padding: "12px 14px", borderBottom: "1px solid var(--border)", textAlign: "center", fontSize: 13, color: "var(--text)" }}>{item.quantity}</td>
                   <td style={{ padding: "12px 14px", borderBottom: "1px solid var(--border)", textAlign: "right", fontSize: 13, color: "var(--text)" }}>{formatCLP(item.unitPrice)}</td>
                   <td style={{ padding: "12px 14px", borderBottom: "1px solid var(--border)", textAlign: "right", fontSize: 13, color: "var(--text)" }}>{formatCLP(item.subtotal || item.quantity * item.unitPrice)}</td>
@@ -111,7 +120,10 @@ export default function Boleta({ order, onClose }) {
               const printWindow = window.open('', '_blank', 'width=800,height=800');
               const itemsHtml = order.OrderItems?.map(item => `
                 <tr style="border-bottom: 1px solid #ddd;">
-                  <td style="padding: 12px 8px; font-size: 13px;">${item.productNameSnapshot}</td>
+                  <td style="padding: 12px 8px; font-size: 13px;">
+                    <div>${item.productNameSnapshot}</div>
+                    ${item.components && item.components.length > 0 ? `<div style="margin-top: 4px; padding-left: 8px; font-size: 11px; color: #666; font-style: italic;">` + item.components.map(c => `<div>- ${c.productName} (${c.variantName})</div>`).join('') + `</div>` : ''}
+                  </td>
                   <td style="padding: 12px 8px; font-size: 13px; text-align: center;">${item.quantity}</td>
                   <td style="padding: 12px 8px; font-size: 13px; text-align: right;">$${Number(item.unitPrice).toLocaleString("es-CL")}</td>
                   <td style="padding: 12px 8px; font-size: 13px; text-align: right;">$${Number(item.subtotal || item.quantity * item.unitPrice).toLocaleString("es-CL")}</td>
