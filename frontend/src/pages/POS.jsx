@@ -3,6 +3,7 @@ import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
 import { useCashRegister } from "../context/CashRegisterContext";
 import { apiFetch } from "../utils/apiFetch";
+import { v4 as uuidv4 } from "uuid";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const fmt = (n) => `$${Number(n || 0).toLocaleString("es-CL")}`;
@@ -439,7 +440,7 @@ export default function POS() {
           discountLabel,
           subtotal: finalPrice * itemQty,
           notes: itemNote,
-          groupId: crypto.randomUUID(),
+          groupId: uuidv4(),
           isComposite: true,
           components: componentsData,
         },
