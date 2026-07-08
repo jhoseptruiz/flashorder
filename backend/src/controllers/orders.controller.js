@@ -5,6 +5,8 @@ import {
   getOrderById,
   getOrdersForEmployee,
   getUberPendingOrders,
+  cancelOrder,
+  updateCancelOrder,
 } from "../services/orders.service.js";
 import { createAuditLog } from "../helpers/audit.helper.js";
 
@@ -53,7 +55,7 @@ export async function getOrdersForKitchenController(req, res) {
 export async function updateOrderStatusController(req, res) {
   try {
     const { orderId } = req.params;
-    const { status } = req.body;
+    const { status, balancePaymentMethod } = req.body;
 
     if (!status) {
       return res.status(400).json({ error: "El estado es requerido" });
@@ -63,7 +65,7 @@ export async function updateOrderStatusController(req, res) {
     const previousOrder = await getOrderById(orderId);
     const oldStatus = previousOrder.status;
 
-    const order = await updateOrderStatus(orderId, status);
+    const order = await updateOrderStatus(orderId, status, balancePaymentMethod || null);
 
     // Registrar auditoría del cambio de estado
     await createAuditLog(
@@ -127,6 +129,57 @@ export async function getUberPendingOrdersController(req, res) {
     res.json(orders);
   } catch (error) {
     console.error("Error en getUberPendingOrdersController:", error);
-    res.status(500).json({ error: "No se pudieron obtener los pedidos Uber" });
+    res
+      .status(500)
+      .json({ error: "No se pudieron obtener las órdenes pendientes de Uber" });
+  }
+}
+
+export async function cancelOrderController(req, res) {
+  try {
+    const { orderId } = req.params;
+    const { reason, isRefunded } = req.body;
+
+    const previousOrder = await getOrderById(orderId);
+    const oldStatus = previousOrder.status;
+
+    const order = await cancelOrder(orderId, reason, isRefunded, req.user.rut);
+
+    await createAuditLog(
+      req.user.rut,
+      "CANCEL_ORDER",
+      "customer_orders",
+      orderId,
+      { status: oldStatus },
+      { status: "cancelado", reason, isRefunded }
+    );
+
+    res.json({ message: "Orden cancelada correctamente", order });
+  } catch (error) {
+    console.error("Error en cancelOrderController:", error);
+    res.status(500).json({ error: error.message || "No se pudo cancelar la orden" });
+  }
+}
+
+export async function updateCancelOrderController(req, res) {
+  try {
+    const { orderId } = req.params;
+    const { isRefunded, reason } = req.body;
+
+    const order = await updateCancelOrder(orderId, isRefunded, reason);
+
+    await createAuditLog(
+      req.user.rut,
+      "UPDATE_CANCEL_ORDER",
+      "customer_orders",
+      orderId,
+      null,
+      { isRefunded, reason }
+    );
+
+    res.json({ message: "Cancelación actualizada correctamente", order });
+  } catch (error) {
+    console.error("Error en updateCancelOrderController:", error);
+    res.status(500).json({ error: error.message || "No se pudo actualizar la cancelación" });
   }
 }

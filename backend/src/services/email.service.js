@@ -79,14 +79,24 @@ export function buildReceiptHtml(order, companyInfo = {}) {
     const subtotal = formatMoney(item.subtotal || quantity * (item.unitPrice || 0));
     return `
       <tr>
-        <td style="padding: 10px 12px; border-bottom: 1px solid #e5e7eb;">${description}</td>
+        <td style="padding: 10px 12px; border-bottom: 1px solid #e5e7eb;">
+          <div>${description}</div>
+          ${item.components && item.components.length > 0 ? `<div style="margin-top: 4px; padding-left: 8px; font-size: 11px; color: #6b7280; font-style: italic;">` + item.components.map(c => `<div>- ${c.category}: ${c.productName} (${c.variantName})</div>`).join('') + `</div>` : ''}
+        </td>
         <td style="padding: 10px 12px; border-bottom: 1px solid #e5e7eb; text-align: center;">${quantity}</td>
         <td style="padding: 10px 12px; border-bottom: 1px solid #e5e7eb; text-align: right;">${unitPrice}</td>
         <td style="padding: 10px 12px; border-bottom: 1px solid #e5e7eb; text-align: right;">${subtotal}</td>
       </tr>`;
   }).join("") : "";
 
-  const totalAmount = formatMoney(order.totalAmount || order.OrderItems?.reduce((sum, item) => sum + (item.subtotal || item.quantity * item.unitPrice), 0) || 0);
+  const itemsTotal = order.OrderItems?.reduce((sum, item) => sum + (item.subtotal || item.quantity * item.unitPrice), 0) || 0;
+  const finalTotal = order.totalAmount ?? itemsTotal;
+  const discount = Math.max(0, itemsTotal - finalTotal);
+
+  const formattedItemsTotal = formatMoney(itemsTotal);
+  const formattedFinalTotal = formatMoney(finalTotal);
+  const formattedDiscount = formatMoney(discount);
+
   const depositAmount = formatMoney(order.depositAmount || 0);
   const paymentMethod = order.paymentMethod || "No definido";
   const notes = order.notes ? `<p style="margin: 8px 0 0; font-size: 13px; color: #6b7280;">Notas: ${order.notes}</p>` : "";
@@ -142,13 +152,19 @@ export function buildReceiptHtml(order, companyInfo = {}) {
       </div>
 
       <div style="display: flex; flex-direction: column; gap: 8px; align-items: flex-end; margin-top: 24px;">
+        ${discount > 0 ? `
         <div style="width: min(360px, 100%); display: flex; justify-content: space-between; color: #6b7280; font-size: 14px;">
           <span>Subtotal</span>
-          <strong>${totalAmount}</strong>
+          <span>${formattedItemsTotal}</span>
         </div>
-        <div style="width: min(360px, 100%); display: flex; justify-content: space-between; font-size: 15px; font-weight: 700; color: #111827;">
+        <div style="width: min(360px, 100%); display: flex; justify-content: space-between; color: #dc2626; font-size: 14px;">
+          <span>Descuento</span>
+          <span>-${formattedDiscount}</span>
+        </div>
+        ` : ''}
+        <div style="width: min(360px, 100%); display: flex; justify-content: space-between; font-size: 15px; font-weight: 700; color: #111827; border-top: ${discount > 0 ? '1px solid #e5e7eb' : 'none'}; padding-top: ${discount > 0 ? '8px' : '0'};">
           <span>Total a pagar</span>
-          <strong>${totalAmount}</strong>
+          <strong>${formattedFinalTotal}</strong>
         </div>
       </div>
 
@@ -237,7 +253,13 @@ export async function createReceiptPdfBuffer(order, companyInfo = {}) {
   const customerPhone = order.Customer?.phone || "-";
   const customerEmail = order.Customer?.email || "-";
   const paymentMethod = order.paymentMethod || "No definido";
-  const totalAmount = formatMoney(order.totalAmount || items.reduce((s, it) => s + (it.subtotal || it.quantity * it.unitPrice), 0));
+  const itemsTotal = items.reduce((s, it) => s + (it.subtotal || it.quantity * it.unitPrice), 0);
+  const finalTotal = order.totalAmount ?? itemsTotal;
+  const discount = Math.max(0, itemsTotal - finalTotal);
+
+  const formattedItemsTotal = formatMoney(itemsTotal);
+  const formattedFinalTotal = formatMoney(finalTotal);
+  const formattedDiscount = formatMoney(discount);
   const depositAmount = formatMoney(order.depositAmount || 0);
 
   const logoBuffer = await fetchImageBuffer(logoUrl);
@@ -312,12 +334,29 @@ export async function createReceiptPdfBuffer(order, companyInfo = {}) {
     doc.moveDown(0.8);
 
     // Totals box
-    doc.rect(350, doc.y, 190, 70).fill("#f8fafc");
-    doc.fillColor("#6b7280").fontSize(10).text("Total a pagar", 360, doc.y + 10);
-    doc.fillColor("#111827").fontSize(16).text(totalAmount, 360, doc.y + 28);
+    let boxHeight = 70;
+    if (discount > 0) boxHeight += 40;
+    
+    doc.rect(350, doc.y, 190, boxHeight).fill("#f8fafc");
+    let currentY = doc.y + 10;
+    
+    if (discount > 0) {
+      doc.fillColor("#6b7280").fontSize(10).text("Subtotal", 360, currentY);
+      doc.text(formattedItemsTotal, 360, currentY, { width: 170, align: "right" });
+      currentY += 16;
+      
+      doc.fillColor("#dc2626").fontSize(10).text("Descuento", 360, currentY);
+      doc.text("-" + formattedDiscount, 360, currentY, { width: 170, align: "right" });
+      currentY += 20;
+    }
+    
+    doc.fillColor("#6b7280").fontSize(10).text("Total a pagar", 360, currentY);
+    doc.fillColor("#111827").fontSize(16).text(formattedFinalTotal, 360, currentY + 18, { width: 170, align: "left" });
+    
+    doc.y = doc.y + boxHeight;
 
     if (order.notes) {
-      doc.moveDown(5);
+      doc.moveDown(2);
       doc.fillColor("#111827").fontSize(12).text("Notas", { underline: true });
       doc.moveDown(0.3);
       doc.fontSize(10).fillColor("#4b5563").text(order.notes, { width: 490 });

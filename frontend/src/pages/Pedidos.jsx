@@ -12,11 +12,26 @@ const STATUS_META = {
   en_cocina:      { label: "Preparando", color: "#f59e0b", bg: "#fef9c3" },
   empacado:       { label: "Empacado",   color: "#10b981", bg: "#dcfce7" },
   entregado:      { label: "Entregado",  color: "#6b7280", bg: "#f3f4f6" },
+  cancelado:      { label: "Cancelado",  color: "#ef4444", bg: "#fee2e2" },
 };
 
-const getStatusColor = (status) => STATUS_META[status]?.color ?? "#6b7280";
-const getStatusLabel = (status) => STATUS_META[status]?.label ?? status;
-const getStatusBg    = (status) => STATUS_META[status]?.bg ?? "#f3f4f6";
+const getStatusColor = (orderOrStatus) => {
+  const status = typeof orderOrStatus === "string" ? orderOrStatus : orderOrStatus?.status;
+  if (status === "cancelado" && typeof orderOrStatus !== "string" && orderOrStatus?.isRefunded) return "#10b981";
+  return STATUS_META[status]?.color ?? "#6b7280";
+};
+
+const getStatusLabel = (orderOrStatus) => {
+  const status = typeof orderOrStatus === "string" ? orderOrStatus : orderOrStatus?.status;
+  if (status === "cancelado" && typeof orderOrStatus !== "string" && orderOrStatus?.isRefunded) return "Cancelado ✓";
+  return STATUS_META[status]?.label ?? status;
+};
+
+const getStatusBg = (orderOrStatus) => {
+  const status = typeof orderOrStatus === "string" ? orderOrStatus : orderOrStatus?.status;
+  if (status === "cancelado" && typeof orderOrStatus !== "string" && orderOrStatus?.isRefunded) return "#dcfce7";
+  return STATUS_META[status]?.bg ?? "#f3f4f6";
+};
 
 const formatCLP = (amount) =>
   new Intl.NumberFormat("es-CL", { style: "currency", currency: "CLP" }).format(amount);
@@ -61,12 +76,19 @@ export default function Pedidos() {
   // Calendario
   const [currentDate,   setCurrentDate]   = useState(new Date());
   const [selectedDate,  setSelectedDate]  = useState(new Date());
+  const [showMobileCalendar, setShowMobileCalendar] = useState(false);
 
   // Modal detalle
   const [detailOrder,   setDetailOrder]   = useState(null);
 
   // Modal confirmación de entrega (con saldo pendiente)
   const [deliveryConfirm, setDeliveryConfirm] = useState(null);
+  const [balanceMethod, setBalanceMethod] = useState("efectivo");
+
+  // Modal para cancelar pedido o confirmar devolución
+  const [cancelModal, setCancelModal] = useState(null);
+  const [cancelReason, setCancelReason] = useState("");
+  const [isRefunded, setIsRefunded] = useState(false);
 
   // ── Fetch ────────────────────────────────────────────────────────────────
 
@@ -118,11 +140,11 @@ export default function Pedidos() {
 
   // ── Cambio de estado de un pedido ────────────────────────────────────────
 
-  const handleStatusChange = async (orderId, newStatus, skipConfirm = false) => {
-    // Intercepción: si se marca como entregado y tiene saldo en efectivo, confirmar
+  const handleStatusChange = async (orderId, newStatus, skipConfirm = false, balancePaymentMethod = null) => {
+    // Intercepción: si se marca como entregado y tiene saldo, confirmar método de pago
     if (newStatus === "entregado" && !skipConfirm) {
       const order = [...activeOrders, ...uberOrders].find(o => o.id === orderId);
-      if (order && order.paymentMethod === "efectivo") {
+      if (order) {
         const pending = Number(order.totalAmount || 0) - Number(order.depositAmount || 0);
         if (pending > 0) {
           setDeliveryConfirm({ order, pendingAmount: pending });
@@ -132,9 +154,14 @@ export default function Pedidos() {
     }
     setUpdatingId(orderId);
     try {
+      const body = { status: newStatus };
+      if (balancePaymentMethod) {
+        body.balancePaymentMethod = balancePaymentMethod;
+      }
+      
       const res = await apiFetch(`/api/orders/${orderId}/status`, {
         method: "PUT",
-        body:   JSON.stringify({ status: newStatus }),
+        body:   JSON.stringify(body),
       });
 
       if (!res.ok) throw new Error("No se pudo actualizar el estado");
@@ -146,6 +173,34 @@ export default function Pedidos() {
       showToast(err.message, "error");
     } finally {
       setUpdatingId(null);
+    }
+  };
+
+  const submitCancelOrder = async () => {
+    if (!cancelModal) return;
+
+    try {
+      const isUpdating = cancelModal.order.status === "cancelado";
+      const endpoint = `/api/orders/${cancelModal.order.id}/cancel`;
+      const method = isUpdating ? "PUT" : "POST";
+      
+      const res = await apiFetch(endpoint, {
+        method,
+        body: JSON.stringify({ reason: cancelReason || "Sin motivo", isRefunded }),
+      });
+
+      if (!res.ok) throw new Error("No se pudo procesar la cancelación");
+
+      showToast(isUpdating ? "Cancelación actualizada" : "Pedido cancelado", "success");
+      setCancelModal(null);
+      if (isRefunded) refreshSession();
+      fetchOrders();
+      
+      if (detailOrder && detailOrder.id === cancelModal.order.id) {
+        setDetailOrder(null);
+      }
+    } catch (err) {
+      showToast(err.message, "error");
     }
   };
 
@@ -175,7 +230,7 @@ export default function Pedidos() {
   return (
     <div
       className="page-container"
-      style={{ maxWidth: 1200, margin: "0 auto", animation: "fadein 0.3s ease", padding: "0 16px", height: "calc(100vh - 64px)", display: "flex", flexDirection: "column" }}
+      style={{ maxWidth: 1200, margin: "0 auto", animation: "fadein 0.3s ease", padding: "0 16px", height: "calc(100dvh - 64px)", display: "flex", flexDirection: "column" }}
     >
       {/* Header */}
       <div className="page-header" style={{ marginBottom: 20 }}>
@@ -184,7 +239,7 @@ export default function Pedidos() {
             fontFamily: "Syne, sans-serif", fontSize: 28, fontWeight: 700,
             color: "var(--text)", letterSpacing: "-0.3px",
           }}>
-            📋 Pedidos y Calendario
+            Pedidos y Calendario
           </h1>
           <p style={{ fontSize: 14, color: "var(--text2)", marginTop: 4 }}>
             Gestión de pedidos del empleado
@@ -198,13 +253,25 @@ export default function Pedidos() {
           <p style={{ marginTop: 12 }}>Cargando pedidos...</p>
         </div>
       ) : (
-        <div className="pedidos-layout" style={{ display: "grid", gridTemplateColumns: "1fr", gap: 20, flex: 1, minHeight: 0 }}>
+        <div className="pedidos-layout">
 
           {/* ═══ COLUMNA IZQUIERDA ═══ */}
-          <aside className="pedidos-sidebar" style={{ display: "flex", flexDirection: "column", gap: 16, height: "100%", minHeight: 0 }}>
+          <aside className="pedidos-sidebar">
+            {/* Botón para alternar calendario en móvil */}
+            <button
+              className="mobile-calendar-toggle"
+              onClick={() => setShowMobileCalendar(!showMobileCalendar)}
+              style={{
+                background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 10, padding: 12,
+                color: "var(--text)", fontWeight: 700, fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8
+              }}
+            >
+              <i className={`ti ${showMobileCalendar ? "ti-calendar-minus" : "ti-calendar-plus"}`} style={{ fontSize: 16, color: primary }} />
+              {showMobileCalendar ? "Ocultar Calendario" : "Mostrar Calendario"}
+            </button>
 
             {/* ── Calendario ── */}
-            <div className="card" style={{ padding: 16 }}>
+            <div className={`card calendar-card ${showMobileCalendar ? "show" : ""}`} style={{ padding: 16 }}>
               {/* Navegación del mes */}
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
                 <button
@@ -368,8 +435,15 @@ export default function Pedidos() {
                           marginBottom: 10, fontSize: 12, color: "var(--text)",
                         }}>
                           {items.slice(0, maxShow).map((item) => (
-                            <div key={item.id} style={{ marginBottom: 2 }}>
-                              X{item.quantity} {item.productNameSnapshot}
+                            <div key={item.id} style={{ marginBottom: 4 }}>
+                              <div>X{item.quantity} {item.productNameSnapshot}</div>
+                              {item.components && item.components.length > 0 && (
+                                <div style={{ paddingLeft: 12, fontSize: 10, color: "var(--text2)", fontStyle: "italic" }}>
+                                  {item.components.map((c, i) => (
+                                    <div key={i}>- {c.category}: {c.productName} ({c.variantName})</div>
+                                  ))}
+                                </div>
+                              )}
                             </div>
                           ))}
                           {remaining > 0 && (
@@ -431,7 +505,7 @@ export default function Pedidos() {
           </aside>
 
           {/* ═══ COLUMNA DERECHA — TABLA DE PEDIDOS DEL DÍA ═══ */}
-          <div className="pedidos-main card" style={{ padding: 20, display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
+          <div className="pedidos-main card">
             <div style={{ marginBottom: 14 }}>
               <h2 style={{
                 fontSize: 20, fontWeight: 700, color: "var(--text)", margin: 0,
@@ -451,7 +525,7 @@ export default function Pedidos() {
                   <p style={{ fontSize: 13 }}>Sin pedidos para este día</p>
                 </div>
               ) : (
-                <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 500 }}>
+                <table className="responsive-table" style={{ width: "100%", borderCollapse: "collapse" }}>
                   <thead>
                     <tr style={{ borderBottom: "2px solid var(--border)", textAlign: "left", color: "var(--text)", fontSize: 13, fontWeight: 700 }}>
                       <th style={{ padding: "12px 10px" }}>ID</th>
@@ -475,27 +549,27 @@ export default function Pedidos() {
                             transition: "opacity 0.2s",
                           }}
                         >
-                          <td style={{ padding: "14px 10px", fontSize: 13, fontWeight: 700, color: "var(--text)" }}>
+                          <td data-label="ID" style={{ padding: "14px 10px", fontSize: 13, fontWeight: 700, color: "var(--text)" }}>
                             #{order.id.substring(0, 4).toUpperCase()}
                           </td>
-                          <td style={{ padding: "14px 10px", fontSize: 13, color: "var(--text)" }}>
+                          <td data-label="Cliente" style={{ padding: "14px 10px", fontSize: 13, color: "var(--text)" }}>
                             {order.Customer?.fullName || "—"}
                           </td>
-                          <td style={{ padding: "14px 10px", fontSize: 13, color: "var(--text)" }}>
+                          <td data-label="Hora" style={{ padding: "14px 10px", fontSize: 13, color: "var(--text)" }}>
                             {dateField ? formatTime(dateField) : "—"}
                           </td>
-                          <td style={{ padding: "14px 10px" }}>
+                          <td data-label="Estado" style={{ padding: "14px 10px" }}>
                             <span style={{
                               fontSize: 11, fontWeight: 700, padding: "4px 12px", borderRadius: 6,
-                              background: getStatusBg(order.status),
-                              color: getStatusColor(order.status),
-                              border: `1px solid ${getStatusColor(order.status)}30`,
+                              background: getStatusBg(order),
+                              color: getStatusColor(order),
+                              border: `1px solid ${getStatusColor(order)}30`,
                               whiteSpace: "nowrap",
                             }}>
-                              {getStatusLabel(order.status)}
+                              {getStatusLabel(order)}
                             </span>
                           </td>
-                          <td style={{ padding: "14px 10px", textAlign: "right" }}>
+                          <td data-label="Acciones" style={{ padding: "14px 10px", textAlign: "right" }}>
                             <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
                               <button
                                 type="button"
@@ -617,11 +691,17 @@ export default function Pedidos() {
                 <div key={item.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "start" }}>
                   <div>
                     <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>
-                      {item.productNameSnapshot}
+                      {item.productNameSnapshot} {item.quantity > 1 ? `× ${item.quantity}` : ""}
                     </div>
-                    <div style={{ fontSize: 12, color: "var(--text2)" }}>
-                      {item.ProductVariant?.variantName || ""} {item.quantity > 1 ? `× ${item.quantity}` : ""}
-                    </div>
+                    {item.components && Array.isArray(item.components) && (
+                      <div style={{ marginLeft: 8, marginTop: 4, display: "flex", flexDirection: "column", gap: 2 }}>
+                        {item.components.map((c, idx) => (
+                          <div key={idx} style={{ fontSize: 11, color: "var(--text2)" }}>
+                            - {c.category}: {c.productName} ({c.variantName})
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                   <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text)", whiteSpace: "nowrap" }}>
                     {formatCLP(item.unitPrice * item.quantity)}
@@ -660,6 +740,59 @@ export default function Pedidos() {
                 <span style={{ fontWeight: 800, color: primary }}>{formatCLP(detailOrder.totalAmount)}</span>
               </div>
             </div>
+            
+            {detailOrder.status === "cancelado" && !detailOrder.isRefunded && (
+              <div style={{ marginTop: 24, padding: 14, background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 8 }}>
+                <div style={{ fontSize: 13, color: "#991b1b", fontWeight: 700, marginBottom: 8 }}>⚠️ Este pedido fue cancelado y tiene devolución pendiente.</div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCancelModal({ order: detailOrder, step: 1 });
+                    setCancelReason(detailOrder.cancellationReason || "Cancelado por producción");
+                    setIsRefunded(false);
+                  }}
+                  style={{
+                    width: "100%", padding: "10px", borderRadius: 8, border: "none",
+                    background: "#ef4444", color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer",
+                  }}
+                >
+                  Procesar Devolución
+                </button>
+              </div>
+            )}
+
+            {detailOrder.status !== "cancelado" && detailOrder.status !== "entregado" && detailOrder.status !== "rechazado" && (
+              <div style={{ marginTop: 24, display: "flex", gap: 10 }}>
+                {(detailOrder.paymentMethod === "efectivo" || detailOrder.paymentMethod === "transferencia") ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCancelModal({ order: detailOrder, step: 1 });
+                      setCancelReason("");
+                      setIsRefunded(false);
+                    }}
+                    style={{
+                      flex: 1, padding: "10px", borderRadius: 8, border: "1px solid #ef4444",
+                      background: "#fee2e2", color: "#ef4444", fontSize: 14, fontWeight: 600, cursor: "pointer",
+                    }}
+                  >
+                    Cancelar Pedido
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    disabled
+                    style={{
+                      flex: 1, padding: "10px", borderRadius: 8, border: "1px solid var(--border)",
+                      background: "var(--surface2)", color: "var(--text2)", fontSize: 14, fontWeight: 600, cursor: "not-allowed",
+                      opacity: 0.7
+                    }}
+                  >
+                    No puedes cancelar pedidos con tarjeta
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -719,9 +852,35 @@ export default function Pedidos() {
               </div>
             </div>
 
-            <p style={{ fontSize: 12, color: "var(--text2)", marginBottom: 18 }}>
-              Asegúrate de cobrar el saldo pendiente antes de marcar como entregado. El monto se registrará automáticamente en la caja.
+            <p style={{ fontSize: 12, color: "var(--text2)", marginBottom: 16 }}>
+              Asegúrate de cobrar el saldo pendiente antes de marcar como entregado.
             </p>
+
+            <div style={{ marginBottom: 18 }}>
+              <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "var(--text)", marginBottom: 6 }}>
+                Método de pago del saldo:
+              </label>
+              <div style={{ display: "flex", gap: 8 }}>
+                {["efectivo", "transferencia", "tarjeta"].map((method) => (
+                  <button
+                    key={method}
+                    type="button"
+                    onClick={() => setBalanceMethod(method)}
+                    style={{
+                      flex: 1, padding: "10px", borderRadius: 8,
+                      border: balanceMethod === method ? `1px solid ${primary}` : "1px solid var(--border)",
+                      background: balanceMethod === method ? `${primary}15` : "var(--surface)",
+                      color: balanceMethod === method ? primary : "var(--text)",
+                      fontWeight: balanceMethod === method ? 700 : 500,
+                      cursor: "pointer", textTransform: "capitalize",
+                      transition: "all 0.2s"
+                    }}
+                  >
+                    {method}
+                  </button>
+                ))}
+              </div>
+            </div>
 
             <div style={{ display: "flex", gap: 10 }}>
               <button
@@ -738,7 +897,7 @@ export default function Pedidos() {
                 onClick={() => {
                   const orderId = deliveryConfirm.order.id;
                   setDeliveryConfirm(null);
-                  handleStatusChange(orderId, "entregado", true);
+                  handleStatusChange(orderId, "entregado", true, balanceMethod);
                 }}
                 style={{
                   flex: 1, padding: "12px 16px", borderRadius: 8, border: "none",
@@ -753,10 +912,238 @@ export default function Pedidos() {
         </div>
       )}
 
+      {/* ═══ MODAL CANCELAR PEDIDO ═══ */}
+      {cancelModal && (
+        <div
+          style={{
+            position: "fixed", inset: 0, background: "rgba(15, 23, 42, 0.54)",
+            backdropFilter: "blur(4px)", display: "flex", alignItems: "center",
+            justifyContent: "center", zIndex: 100, padding: 20,
+            animation: "fadein 0.2s ease",
+          }}
+          onClick={() => setCancelModal(null)}
+        >
+          <div
+            style={{
+              background: "var(--surface)", border: "1px solid var(--border)",
+              borderRadius: 16, padding: 28, width: "min(420px, 100%)",
+              boxShadow: "0 28px 80px rgba(15, 23, 42, 0.32)", position: "relative",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button onClick={() => setCancelModal(null)} style={{ position: "absolute", top: 14, right: 14, border: "1px solid var(--border)", background: "transparent", color: "var(--text)", borderRadius: 999, width: 30, height: 30, display: "inline-flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
+              <i className="ti ti-x" />
+            </button>
+
+            <h2 style={{ fontSize: 20, fontWeight: 700, color: "#ef4444", margin: "0 0 16px", fontFamily: "Syne, sans-serif" }}>
+              {cancelModal.order.status === "cancelado" ? "Confirmar Devolución" : "Cancelar Pedido"}
+            </h2>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 16, marginBottom: 24 }}>
+              <div>
+                <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "var(--text)", marginBottom: 6 }}>
+                  Motivo de cancelación:
+                </label>
+                <textarea
+                  value={cancelReason}
+                  onChange={(e) => setCancelReason(e.target.value)}
+                  placeholder="Ej: Cliente se arrepintió..."
+                  style={{
+                    width: "100%", padding: "10px 12px", borderRadius: 8,
+                    border: "1px solid var(--border)", background: "var(--surface2)",
+                    color: "var(--text)", fontSize: 14, minHeight: 80, resize: "vertical",
+                  }}
+                />
+              </div>
+
+              {(cancelModal.order.paymentMethod === "efectivo" || cancelModal.order.paymentMethod === "transferencia") ? (
+                <div style={{ background: "#fef3c7", padding: 14, borderRadius: 8, border: "1px solid #fcd34d" }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: "#92400e", marginBottom: 8 }}>
+                    ¿Se devolvió el dinero de este pedido?
+                  </div>
+                  <div style={{ fontSize: 12, color: "#78350f", marginBottom: 12 }}>
+                    Monto a devolver: <strong>{formatCLP(cancelModal.order.depositAmount > 0 ? cancelModal.order.depositAmount : cancelModal.order.totalAmount)}</strong>
+                    <br />Método original: <strong>{cancelModal.order.paymentMethod}</strong>
+                  </div>
+                  <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+                    <input
+                      type="checkbox"
+                      checked={isRefunded}
+                      onChange={(e) => setIsRefunded(e.target.checked)}
+                      style={{ width: 18, height: 18, accentColor: "#ef4444" }}
+                    />
+                    <span style={{ fontSize: 14, fontWeight: 700, color: "var(--text)" }}>Sí, registrar salida en caja</span>
+                  </label>
+                </div>
+              ) : (
+                <div style={{ background: "#eff6ff", padding: 14, borderRadius: 8, border: "1px solid #bfdbfe" }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: "#1e3a8a", marginBottom: 8 }}>
+                    Confirmar devolución externa
+                  </div>
+                  <div style={{ fontSize: 12, color: "#1e40af", marginBottom: 12 }}>
+                    Este pedido se pagó con <strong>{cancelModal.order.paymentMethod}</strong>.
+                    <br />Reversa el pago en la máquina Transbank/externa y luego confirma aquí. No se extraerá dinero de la caja física.
+                  </div>
+                  <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+                    <input
+                      type="checkbox"
+                      checked={isRefunded}
+                      onChange={(e) => setIsRefunded(e.target.checked)}
+                      style={{ width: 18, height: 18, accentColor: "#3b82f6" }}
+                    />
+                    <span style={{ fontSize: 14, fontWeight: 700, color: "var(--text)" }}>Confirmo que el dinero fue devuelto externamente</span>
+                  </label>
+                </div>
+              )}
+            </div>
+
+            <div style={{ display: "flex", gap: 10 }}>
+              <button
+                onClick={() => setCancelModal(null)}
+                style={{
+                  flex: 1, padding: "12px 16px", borderRadius: 8, border: "1px solid var(--border)",
+                  background: "transparent", color: "var(--text)", fontSize: 13, fontWeight: 600, cursor: "pointer",
+                }}
+              >
+                Cerrar
+              </button>
+              <button
+                onClick={submitCancelOrder}
+                style={{
+                  flex: 1, padding: "12px 16px", borderRadius: 8, border: "none",
+                  background: "#ef4444", color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer",
+                }}
+              >
+                Confirmar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <style>{`
+        .pedidos-layout {
+          display: flex;
+          flex-direction: column;
+          gap: 16px;
+          overflow: hidden;
+          flex: 1;
+          min-height: 0;
+        }
+
+        .pedidos-sidebar {
+          margin-bottom: 0;
+          display: flex;
+          flex-direction: column;
+          gap: 14px;
+          flex: 1 1 50%;
+          min-height: 0;
+          min-width: 0;
+          position: relative;
+        }
+        
+        .pedidos-main {
+          margin-bottom: 16px;
+          padding: 20px;
+          display: flex;
+          flex-direction: column;
+          flex: 1 1 50%;
+          min-height: 0;
+          min-width: 0;
+        }
+        
+        .mobile-calendar-toggle {
+          display: flex !important;
+        }
+        .calendar-card {
+          display: none;
+        }
+        .calendar-card.show {
+          display: block;
+          position: absolute;
+          top: 52px;
+          left: 0;
+          right: 0;
+          z-index: 100;
+          box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+        }
+
         @media (min-width: 768px) {
           .pedidos-layout {
+            display: grid !important;
+            grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) !important;
+            gap: 20px;
+            overflow: hidden;
+          }
+          .pedidos-sidebar,
+          .pedidos-main {
+            flex: unset !important;
+            margin-bottom: 0 !important;
+            height: 100%;
+          }
+          .mobile-calendar-toggle {
+            display: none !important;
+          }
+          .calendar-card {
+            display: block !important;
+          }
+        }
+
+        @media (max-width: 767px) {
+          .responsive-table thead {
+            display: none;
+          }
+          .responsive-table, .responsive-table tbody, .responsive-table tr, .responsive-table td {
+            display: block;
+            width: 100%;
+          }
+          .responsive-table tr {
+            margin-bottom: 12px;
+            border: 1px solid var(--border) !important;
+            border-radius: 12px;
+            background: var(--surface2);
+            padding: 12px;
+          }
+          .responsive-table td {
+            padding: 6px 0 !important;
+            border: none !important;
+            text-align: right !important;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+          }
+          .responsive-table td::before {
+            content: attr(data-label);
+            font-weight: 700;
+            color: var(--text2);
+            font-size: 11px;
+            text-transform: uppercase;
+            margin-right: 10px;
+          }
+          .responsive-table td:last-child {
+            margin-top: 8px;
+            border-top: 1px dashed var(--border) !important;
+            padding-top: 12px !important;
+            justify-content: center;
+          }
+          .responsive-table td:last-child::before {
+            display: none;
+          }
+          .modal-content {
+            padding: 20px 16px !important;
+          }
+        }
+
+        @media (min-width: 768px) {
+          .pedidos-layout {
+            display: grid;
             grid-template-columns: 320px 1fr !important;
+            gap: 20px;
+          }
+          .pedidos-sidebar,
+          .pedidos-main {
+            margin-bottom: 0;
+            padding: 24px !important;
           }
         }
 

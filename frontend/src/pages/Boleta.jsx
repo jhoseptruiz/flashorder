@@ -22,9 +22,15 @@ export default function Boleta({ order, onClose }) {
   const companyName = order?.companyName || appName || "FlashOrder";
   const companyLogo = order?.companyLogo || appLogo;
 
-  const totalAmount = useMemo(() => {
-    if (!order?.OrderItems) return 0;
-    return order.OrderItems.reduce((sum, item) => sum + (item.subtotal || item.quantity * item.unitPrice), 0);
+  const { itemsTotal, finalTotal, discount } = useMemo(() => {
+    if (!order?.OrderItems) return { itemsTotal: 0, finalTotal: 0, discount: 0 };
+    const sum = order.OrderItems.reduce((s, item) => s + (item.subtotal || item.quantity * item.unitPrice), 0);
+    const final = order.totalAmount ?? sum;
+    return {
+      itemsTotal: sum,
+      finalTotal: final,
+      discount: Math.max(0, sum - final),
+    };
   }, [order]);
 
   if (!order) return null;
@@ -88,7 +94,16 @@ export default function Boleta({ order, onClose }) {
             <tbody>
               {order.OrderItems?.map((item) => (
                 <tr key={item.id}>
-                  <td style={{ padding: "12px 14px", borderBottom: "1px solid var(--border)", fontSize: 13, color: "var(--text)" }}>{item.productNameSnapshot}</td>
+                  <td style={{ padding: "12px 14px", borderBottom: "1px solid var(--border)", fontSize: 13, color: "var(--text)" }}>
+                    <div>{item.productNameSnapshot}</div>
+                    {item.components && item.components.length > 0 && (
+                      <div style={{ marginTop: 4, paddingLeft: 8, fontSize: 11, color: "var(--text2)", fontStyle: "italic" }}>
+                        {item.components.map((c, i) => (
+                          <div key={i}>- {c.productName} ({c.variantName})</div>
+                        ))}
+                      </div>
+                    )}
+                  </td>
                   <td style={{ padding: "12px 14px", borderBottom: "1px solid var(--border)", textAlign: "center", fontSize: 13, color: "var(--text)" }}>{item.quantity}</td>
                   <td style={{ padding: "12px 14px", borderBottom: "1px solid var(--border)", textAlign: "right", fontSize: 13, color: "var(--text)" }}>{formatCLP(item.unitPrice)}</td>
                   <td style={{ padding: "12px 14px", borderBottom: "1px solid var(--border)", textAlign: "right", fontSize: 13, color: "var(--text)" }}>{formatCLP(item.subtotal || item.quantity * item.unitPrice)}</td>
@@ -105,7 +120,10 @@ export default function Boleta({ order, onClose }) {
               const printWindow = window.open('', '_blank', 'width=800,height=800');
               const itemsHtml = order.OrderItems?.map(item => `
                 <tr style="border-bottom: 1px solid #ddd;">
-                  <td style="padding: 12px 8px; font-size: 13px;">${item.productNameSnapshot}</td>
+                  <td style="padding: 12px 8px; font-size: 13px;">
+                    <div>${item.productNameSnapshot}</div>
+                    ${item.components && item.components.length > 0 ? `<div style="margin-top: 4px; padding-left: 8px; font-size: 11px; color: #666; font-style: italic;">` + item.components.map(c => `<div>- ${c.productName} (${c.variantName})</div>`).join('') + `</div>` : ''}
+                  </td>
                   <td style="padding: 12px 8px; font-size: 13px; text-align: center;">${item.quantity}</td>
                   <td style="padding: 12px 8px; font-size: 13px; text-align: right;">$${Number(item.unitPrice).toLocaleString("es-CL")}</td>
                   <td style="padding: 12px 8px; font-size: 13px; text-align: right;">$${Number(item.subtotal || item.quantity * item.unitPrice).toLocaleString("es-CL")}</td>
@@ -186,10 +204,20 @@ export default function Boleta({ order, onClose }) {
 
                     <div class="total-container">
                       <div class="total-box">
-                        <div style="display: flex; justify-content: space-between; margin-bottom: 8px; color: #666; font-size: 12px;">Total</div>
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 8px; color: #666; font-size: 12px;">Resumen</div>
+                        ${discount > 0 ? `
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 14px; color: #666;">
+                          <span>Subtotal</span>
+                          <span>$${itemsTotal.toLocaleString("es-CL")}</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 12px; font-size: 14px; color: #dc2626;">
+                          <span>Descuento</span>
+                          <span>-$${discount.toLocaleString("es-CL")}</span>
+                        </div>
+                        ` : ''}
                         <div class="total-row">
                           <span>Total</span>
-                          <span>$${totalAmount.toLocaleString("es-CL")}</span>
+                          <span>$${finalTotal.toLocaleString("es-CL")}</span>
                         </div>
                       </div>
                     </div>
@@ -215,10 +243,22 @@ export default function Boleta({ order, onClose }) {
           </button>
 
           <div style={{ minWidth: 240, padding: 16, borderRadius: 16, background: "var(--surface2)", border: "1px solid var(--border)" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8, color: "var(--text2)", fontSize: 12 }}>Total</div>
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 16, fontWeight: 700, color: "var(--text)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8, color: "var(--text2)", fontSize: 12 }}>Resumen</div>
+            {discount > 0 && (
+              <>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, color: "var(--text)", marginBottom: 4 }}>
+                  <span>Subtotal</span>
+                  <span>{formatCLP(itemsTotal)}</span>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, color: "#dc2626", marginBottom: 8 }}>
+                  <span>Descuento</span>
+                  <span>-{formatCLP(discount)}</span>
+                </div>
+              </>
+            )}
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 16, fontWeight: 700, color: "var(--text)", borderTop: discount > 0 ? "1px solid var(--border)" : "none", paddingTop: discount > 0 ? 8 : 0 }}>
               <span>Total</span>
-              <span>{formatCLP(totalAmount)}</span>
+              <span>{formatCLP(finalTotal)}</span>
             </div>
           </div>
         </div>

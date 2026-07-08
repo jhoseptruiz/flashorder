@@ -3,6 +3,7 @@ import sequelize from "../db/db.js";
 import CashRegisterSession from "../models/CashRegisterSession.js";
 import CashRegisterTransaction from "../models/CashRegisterTransaction.js";
 import CustomerOrder from "../models/CustomerOrder.js";
+import User from "../models/User.js";
 import { createAuditLog } from "../helpers/audit.helper.js";
 
 // ── Obtener sesión activa con saldo calculado ─────────────────────────────────
@@ -17,7 +18,7 @@ export async function getActiveSession() {
         include: [
           {
             model: CustomerOrder,
-            attributes: ["paymentMethod"],
+            attributes: ["paymentMethod", "balancePaymentMethod"],
           },
         ],
       },
@@ -43,7 +44,12 @@ function calculateCurrentCash(session) {
 
   if (plain.Transactions && Array.isArray(plain.Transactions)) {
     for (const tx of plain.Transactions) {
-      const paymentMethod = tx.CustomerOrder?.paymentMethod || "efectivo";
+      let paymentMethod = tx.CustomerOrder?.paymentMethod || "efectivo";
+      
+      if (tx.description && tx.description.startsWith("Saldo")) {
+        paymentMethod = tx.CustomerOrder?.balancePaymentMethod || "efectivo";
+      }
+
       if (paymentMethod === "efectivo") {
         const amount = Number(tx.amount) || 0;
         if (tx.type === "income") {
@@ -67,7 +73,12 @@ function calculatePaymentBreakdown(session) {
 
   if (plain.Transactions && Array.isArray(plain.Transactions)) {
     for (const tx of plain.Transactions) {
-      const paymentMethod = tx.CustomerOrder?.paymentMethod || "efectivo";
+      let paymentMethod = tx.CustomerOrder?.paymentMethod || "efectivo";
+      
+      if (tx.description && tx.description.startsWith("Saldo")) {
+        paymentMethod = tx.CustomerOrder?.balancePaymentMethod || "efectivo";
+      }
+
       const amount = Number(tx.amount) || 0;
       
       if (tx.type === "income") {
@@ -263,4 +274,22 @@ export async function getSessionDetails(sessionId) {
     expectedCash,
     breakdown,
   };
+}
+
+// ── Obtener todas las sesiones (turnos) con datos de usuario ─────────────────
+export async function getAllSessions() {
+  const sessions = await CashRegisterSession.findAll({
+    include: [
+      {
+        model: User,
+        as: "OpenedBy",
+        attributes: ["rut", "fullName", "email", "role"],
+        where: { role: "empleado" },
+        required: true,
+      },
+    ],
+    order: [["openingDate", "DESC"]],
+  });
+
+  return sessions.map((s) => s.get({ plain: true }));
 }
