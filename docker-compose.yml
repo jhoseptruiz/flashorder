@@ -1,0 +1,69 @@
+services:
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: flashorder_db
+    restart: unless-stopped
+    env_file: ./backend/.env
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: FlashOrder2025!
+      POSTGRES_DB: flashorder_db
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/src/db/schema.sql:/docker-entrypoint-initdb.d/schema.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - flashorder_net
+
+  backend:
+    build: ./backend
+    container_name: flashorder_backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file: ./backend/.env
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_PASSWORD: FlashOrder2025!
+      NODE_ENV: production
+    ports:
+      - "3000:3000"
+    networks:
+      - flashorder_net
+
+  frontend:
+    build: ./frontend
+    container_name: flashorder_frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    env_file: ./frontend/.env
+    ports:
+      - "5173:5173"
+    networks:
+      - flashorder_net
+
+  localtunnel:
+    image: node:20-alpine
+    container_name: flashorder_localtunnel
+    restart: unless-stopped
+    network_mode: host
+    command: npx -y localtunnel --port 3000 --subdomain rich-crabs-try
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
+
+networks:
+  flashorder_net:
+    driver: bridge

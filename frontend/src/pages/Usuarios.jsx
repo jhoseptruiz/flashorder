@@ -1,0 +1,917 @@
+import { useEffect, useState, useMemo } from "react";
+import { useTheme } from "../context/ThemeContext";
+import { apiFetch } from "../utils/apiFetch";
+
+const ROLES = {
+  empleado: { label: "Empleado", color: "#f9c7d1" },
+  cocinero: { label: "Producción", color: "#ffe3b3" },
+};
+
+const EMPTY_FORM = {
+  rut: "",
+  full_name: "",
+  email: "",
+  password: "",
+  role: "empleado",
+};
+
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+const normalizeRut = (raw) =>
+  String(raw || "")
+    .replace(/[\.\-]/g, "")
+    .replace(/[^0-9kK]/gi, "")
+    .toUpperCase();
+
+const formatRut = (raw) => {
+  const clean = normalizeRut(raw);
+  if (clean.length <= 1) return clean;
+
+  const dv = clean.slice(-1);
+  let body = clean.slice(0, -1);
+  const parts = [];
+
+  while (body.length > 3) {
+    parts.unshift(body.slice(-3));
+    body = body.slice(0, -3);
+  }
+
+  if (body) parts.unshift(body);
+
+  return `${parts.join(".")}-${dv}`;
+};
+
+const validateRut = (raw) => {
+  const clean = normalizeRut(raw);
+  return /^[0-9]+[0-9kK]$/.test(clean) && clean.length >= 8 && clean.length <= 10;
+};
+
+const validateEmail = (value) => EMAIL_REGEX.test(String(value || "").trim().toLowerCase());
+
+const statusStyle = (type) => ({
+  marginTop: 4,
+  fontSize: 12,
+  color: type === "success" ? "#166534" : "#b91c1c",
+});
+
+export default function Usuarios() {
+  const { primary, showToast } = useTheme();
+  const [usuarios, setUsuarios] = useState([]);
+  const [editingRut, setEditingRut] = useState(null);
+  const [form, setForm] = useState(EMPTY_FORM);
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [rutStatus, setRutStatus] = useState({ message: "", type: "" });
+  const [emailStatus, setEmailStatus] = useState({ message: "", type: "" });
+  const [passwordStatus, setPasswordStatus] = useState({ message: "", type: "" });
+  const [showPassword, setShowPassword] = useState(false);
+
+  // Shifts state
+  const [activeTab, setActiveTab] = useState("usuarios");
+  const [shifts, setShifts] = useState([]);
+  const [shiftsLoading, setShiftsLoading] = useState(false);
+  const [shiftFilter, setShiftFilter] = useState("");
+
+  const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
+
+  const fetchUsers = async () => {
+    try {
+      setLoading(true);
+      const response = await apiFetch(`/api/users`);
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || "No se pudieron cargar los usuarios");
+      }
+
+      setUsuarios(data.map((user) => ({ ...user, rut: formatRut(user.rut) })));
+    } catch (error) {
+      showToast(error.message, "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchUsers();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ─── Fetch shifts ─────────────────────────────────
+  const fetchShifts = async () => {
+    try {
+      setShiftsLoading(true);
+      const response = await apiFetch(`/api/cash-register/sessions`);
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No se pudieron cargar los turnos");
+      setShifts(Array.isArray(data) ? data : []);
+    } catch (error) {
+      showToast(error.message, "error");
+      setShifts([]);
+    } finally {
+      setShiftsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === "turnos" && shifts.length === 0) fetchShifts();
+  }, [activeTab]);
+
+  // ─── Shift computations ─────────────────────────────
+  const uniqueEmployees = useMemo(() => {
+    const map = new Map();
+    shifts.forEach((s) => {
+      if (s.OpenedBy && !map.has(s.OpenedBy.rut)) {
+        map.set(s.OpenedBy.rut, s.OpenedBy);
+      }
+    });
+    return Array.from(map.values());
+  }, [shifts]);
+
+  const filteredShifts = useMemo(() => {
+    if (!shiftFilter) return shifts;
+    return shifts.filter((s) => s.openedByRut === shiftFilter);
+  }, [shifts, shiftFilter]);
+
+  const shiftSummary = useMemo(() => {
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const dayOfWeek = now.getDay() === 0 ? 6 : now.getDay() - 1; // Monday=0
+    const weekStart = new Date(todayStart);
+    weekStart.setDate(weekStart.getDate() - dayOfWeek);
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    let dailyMs = 0, weeklyMs = 0, monthlyMs = 0;
+
+    filteredShifts.forEach((s) => {
+      if (!s.closingDate) return;
+      const open = new Date(s.openingDate);
+      const close = new Date(s.closingDate);
+      const duration = close - open;
+      if (duration <= 0) return;
+
+      if (open >= todayStart) dailyMs += duration;
+      if (open >= weekStart) weeklyMs += duration;
+      if (open >= monthStart) monthlyMs += duration;
+    });
+
+    const toHours = (ms) => {
+      const h = Math.floor(ms / 3600000);
+      const m = Math.floor((ms % 3600000) / 60000);
+      return `${h}h ${m}m`;
+    };
+
+    return { daily: toHours(dailyMs), weekly: toHours(weeklyMs), monthly: toHours(monthlyMs) };
+  }, [filteredShifts]);
+
+  const cleanInputRut = (value) => normalizeRut(value);
+
+  const handleRutChange = (event) => {
+    const rawValue = event.target.value;
+    const formattedValue = formatRut(rawValue);
+    setForm((current) => ({ ...current, rut: formattedValue }));
+    setRutStatus({ message: "", type: "" });
+  };
+
+  const handleEmailChange = (event) => {
+    const { value } = event.target;
+    setForm((current) => ({ ...current, email: value }));
+    setEmailStatus({ message: "", type: "" });
+  };
+
+  const handleChange = (event) => {
+    const { name, value } = event.target;
+    if (name === "rut") {
+      handleRutChange(event);
+      return;
+    }
+
+    if (name === "email") {
+      handleEmailChange(event);
+      return;
+    }
+
+    setForm((current) => ({ ...current, [name]: value }));
+  };
+
+  const resetForm = () => {
+    setEditingRut(null);
+    setForm(EMPTY_FORM);
+    setRutStatus({ message: "", type: "" });
+    setEmailStatus({ message: "", type: "" });
+    setPasswordStatus({ message: "", type: "" });
+  };
+
+  const openCreateModal = () => {
+    resetForm();
+    setIsModalOpen(true);
+  };
+
+  const closeModal = () => {
+    resetForm();
+    setIsModalOpen(false);
+  };
+
+  const checkRutAvailability = async (value) => {
+    const formatted = formatRut(value);
+    const cleanRut = normalizeRut(formatted);
+
+    if (!cleanRut) {
+      setRutStatus({ message: "RUT requerido", type: "error" });
+      return false;
+    }
+
+    if (!validateRut(cleanRut)) {
+      setRutStatus({ message: "Formato de RUT inválido", type: "error" });
+      return false;
+    }
+
+    try {
+      const url = `${API_URL}/api/users/check-rut?rut=${encodeURIComponent(cleanRut)}${editingRut ? `&excludeRut=${encodeURIComponent(editingRut)}` : ""}`;
+      const response = await apiFetch(url);
+
+      const data = await response.json();
+      if (!response.ok) {
+        setRutStatus({ message: data.error || "No se pudo verificar el RUT", type: "error" });
+        return false;
+      }
+
+      if (data.exists) {
+        setRutStatus({ message: "Este RUT ya está registrado", type: "error" });
+        return false;
+      }
+
+      setRutStatus({ message: "RUT disponible", type: "success" });
+      return true;
+    } catch (error) {
+      setRutStatus({ message: "Error al verificar el RUT", type: "error" });
+      return false;
+    }
+  };
+
+  const checkEmailAvailability = async (value) => {
+    const emailValue = String(value || "").trim().toLowerCase();
+    if (!emailValue) {
+      setEmailStatus({ message: "Correo electrónico requerido", type: "error" });
+      return false;
+    }
+
+    if (!validateEmail(emailValue)) {
+      setEmailStatus({ message: "Correo electrónico inválido", type: "error" });
+      return false;
+    }
+
+    try {
+      const url = `${API_URL}/api/users/check-email?email=${encodeURIComponent(emailValue)}${editingRut ? `&excludeRut=${encodeURIComponent(editingRut)}` : ""}`;
+      const response = await apiFetch(url);
+
+      const data = await response.json();
+      if (!response.ok) {
+        setEmailStatus({ message: data.error || "No se pudo verificar el correo", type: "error" });
+        return false;
+      }
+
+      if (data.exists) {
+        setEmailStatus({ message: "Este correo ya está registrado", type: "error" });
+        return false;
+      }
+
+      setEmailStatus({ message: "Correo disponible", type: "success" });
+      return true;
+    } catch (error) {
+      setEmailStatus({ message: "Error al verificar el correo", type: "error" });
+      return false;
+    }
+  };
+
+  const handleRutBlur = () => {
+    checkRutAvailability(form.rut);
+  };
+
+  const handleEmailBlur = () => {
+    checkEmailAvailability(form.email);
+  };
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    setSubmitting(true);
+
+    try {
+      const normalizedRut = normalizeRut(form.rut);
+      const emailValue = String(form.email || "").trim().toLowerCase();
+
+      if (!normalizedRut || !validateRut(normalizedRut)) {
+        throw new Error("RUT inválido");
+      }
+
+      if (!validateEmail(emailValue)) {
+        throw new Error("Correo electrónico inválido");
+      }
+
+      if (rutStatus.type === "error") {
+        throw new Error(rutStatus.message || "Revisa el RUT antes de enviar");
+      }
+
+      if (emailStatus.type === "error") {
+        throw new Error(emailStatus.message || "Revisa el correo antes de enviar");
+      }
+
+      const pwd = String(form.password || "").trim();
+
+      if (editingRut) {
+        if (pwd && pwd.length > 0 && pwd.length < 8) {
+          throw new Error("La contraseña debe tener al menos 8 caracteres");
+        }
+
+        const payload = {
+          full_name: form.full_name,
+          email: emailValue,
+          role: form.role,
+        };
+        if (normalizedRut !== editingRut) {
+          payload.rut = normalizedRut;
+        }
+        if (pwd) payload.password = pwd;
+
+        const response = await apiFetch(`/api/users/${editingRut}`, {
+          method: "PUT",
+          body: JSON.stringify(payload),
+        });
+
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data.error || "No se pudo actualizar el usuario");
+        }
+
+        showToast("Usuario actualizado correctamente", "success");
+      } else {
+        if (!pwd) {
+          throw new Error("La contraseña es obligatoria para crear un usuario");
+        }
+        if (pwd.length < 8) {
+          throw new Error("La contraseña debe tener al menos 8 caracteres");
+        }
+
+        const response = await apiFetch(`/api/users`, {
+          method: "POST",
+          body: JSON.stringify({
+            rut: normalizedRut,
+            full_name: form.full_name,
+            email: emailValue,
+            password: pwd,
+            role: form.role,
+          }),
+        });
+
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data.error || "No se pudo crear el usuario");
+        }
+
+        showToast("Usuario creado correctamente", "success");
+      }
+
+      closeModal();
+      await fetchUsers();
+    } catch (error) {
+      showToast(error.message, "error");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleEdit = (user) => {
+    const normalized = normalizeRut(user.rut);
+    setEditingRut(normalized);
+    setForm({
+      rut: formatRut(normalized),
+      full_name: user.full_name,
+      email: user.email,
+      password: "",
+      role: user.role,
+    });
+    setRutStatus({ message: "", type: "" });
+    setEmailStatus({ message: "", type: "" });
+    setIsModalOpen(true);
+  };
+
+  const handleDelete = async (rut) => {
+    if (!window.confirm("¿Seguro que quieres eliminar este usuario?")) return;
+
+    try {
+      const normalizedRut = normalizeRut(rut);
+      const response = await apiFetch(`/api/users/${normalizedRut}`, {
+        method: "DELETE",
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || "No se pudo eliminar el usuario");
+      }
+
+      showToast("Usuario eliminado correctamente", "success");
+      await fetchUsers();
+      if (editingRut === normalizedRut) resetForm();
+    } catch (error) {
+      showToast(error.message, "error");
+    }
+  };
+
+  const empleados = usuarios.filter((user) => user.role === "empleado");
+  const cocineros = usuarios.filter((user) => user.role === "cocinero");
+
+  return (
+    <div className="page-container" style={{ maxWidth: 960, margin: "0 auto", animation: "fadein 0.3s ease" }}>
+      <div className="page-header" style={{ marginBottom: 24, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
+        <div>
+          <h1 style={{ fontFamily: "Syne, sans-serif", fontSize: 28, fontWeight: 700, color: "var(--text)", letterSpacing: "-0.3px" }}>Gestión de Usuarios</h1>
+          <p style={{ fontSize: 14, color: "var(--text2)", marginTop: 4 }}>Administra usuarios con acceso al sistema y sus roles</p>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 12 }}>
+            <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", minWidth: 28, height: 28, borderRadius: 999, background: primary, color: "#fff", fontSize: 12, fontWeight: 700, padding: "0 10px" }}>{usuarios.length}</span>
+            <span style={{ fontSize: 13, color: "var(--text2)" }}>usuarios registrados</span>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={openCreateModal}
+          style={{
+            background: primary,
+            color: "#fff",
+            border: "none",
+            borderRadius: 10,
+            padding: "12px 18px",
+            fontWeight: 700,
+            fontSize: 13,
+            cursor: "pointer",
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 8,
+            boxShadow: "0 10px 24px rgba(124,58,237,0.22)",
+          }}
+        >
+          <i className="ti ti-user-plus" />
+          Agregar usuario
+        </button>
+      </div>
+
+      {/* ─── Tabs ────────────────────────────────────── */}
+      <div style={{ display: "flex", gap: 0, borderBottom: "2px solid var(--border)", marginBottom: 24 }}>
+        {["usuarios", "turnos"].map((tab) => (
+          <button
+            key={tab}
+            onClick={() => setActiveTab(tab)}
+            style={{
+              padding: "11px 22px",
+              fontSize: 14,
+              fontWeight: activeTab === tab ? 700 : 500,
+              color: activeTab === tab ? primary : "var(--text2)",
+              background: "transparent",
+              border: "none",
+              borderBottom: activeTab === tab ? `3px solid ${primary}` : "3px solid transparent",
+              cursor: "pointer",
+              transition: "all 0.18s",
+              fontFamily: "DM Sans, sans-serif",
+              marginBottom: -2,
+            }}
+          >
+            {tab === "usuarios" ? "Gestión de Usuarios" : "Horario de Turnos"}
+          </button>
+        ))}
+      </div>
+
+      {activeTab === "usuarios" && (
+      <>
+
+      {isModalOpen && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(15, 23, 42, 0.54)",
+            backdropFilter: "blur(2px)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 50,
+            padding: 20,
+          }}
+          onClick={closeModal}
+        >
+          <div
+            className="card"
+            style={{
+              width: "min(640px, 100%)",
+              padding: 20,
+              boxShadow: "0 28px 80px rgba(15, 23, 42, 0.32)",
+              position: "relative",
+            }}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+              <div>
+                <h2 style={{ fontSize: 19, fontWeight: 700, color: "var(--text)", margin: 0 }}>{editingRut ? "Editar usuario" : "Agregar nuevo usuario"}</h2>
+                <p style={{ fontSize: 12, color: "var(--text2)", marginTop: 5 }}>Solo se permiten usuarios con rol empleado o producción</p>
+              </div>
+
+              <button
+                type="button"
+                onClick={closeModal}
+                style={{
+                  border: "1px solid var(--border)",
+                  background: "transparent",
+                  color: "var(--text)",
+                  borderRadius: 999,
+                  width: 30,
+                  height: 30,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  cursor: "pointer",
+                }}
+                aria-label="Cerrar modal"
+              >
+                <i className="ti ti-x" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmit} className="responsive-grid" style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 12 }}>
+              <label style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 12, color: "var(--text2)" }}>
+                RUT
+                <input
+                  className="input-field"
+                  name="rut"
+                  value={form.rut}
+                  onChange={handleChange}
+                  onBlur={handleRutBlur}
+                  placeholder="11111111-1"
+                  
+                  required
+                />
+                {rutStatus.message && <span style={statusStyle(rutStatus.type)}>{rutStatus.message}</span>}
+              </label>
+
+              <label style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 12, color: "var(--text2)" }}>
+                Nombre completo
+                <input
+                  className="input-field"
+                  name="full_name"
+                  value={form.full_name}
+                  onChange={handleChange}
+                  placeholder="Juan Pérez"
+                  required
+                />
+              </label>
+
+              <label style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 12, color: "var(--text2)" }}>
+                Correo electrónico
+                <input
+                  className="input-field"
+                  type="email"
+                  name="email"
+                  value={form.email}
+                  onChange={handleChange}
+                  onBlur={handleEmailBlur}
+                  placeholder="usuario@flashorder.cl"
+                  required
+                />
+                {emailStatus.message && <span style={statusStyle(emailStatus.type)}>{emailStatus.message}</span>}
+              </label>
+
+              <label style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 12, color: "var(--text2)" }}>
+                Rol
+                <select
+                  className="input-field"
+                  name="role"
+                  value={form.role}
+                  onChange={handleChange}
+                >
+                  <option value="empleado">Empleado</option>
+                  <option value="cocinero">Producción</option>
+                </select>
+              </label>
+
+              <label style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 12, color: "var(--text2)", gridColumn: "1 / span 2", position: "relative" }}>
+                {editingRut ? "Cambiar contraseña (opcional)" : "Contraseña inicial"}
+                <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
+                  <input
+                    className="input-field"
+                    type={showPassword ? "text" : "password"}
+                    name="password"
+                    value={form.password}
+                    onChange={(e) => {
+                      handleChange(e);
+                      setPasswordStatus({ message: "", type: "" });
+                    }}
+                    onBlur={() => {
+                      const v = String(form.password || "");
+                      if (!editingRut && !v) {
+                        setPasswordStatus({ message: "La contraseña es obligatoria", type: "error" });
+                        return;
+                      }
+                      if (v && v.length > 0 && v.length < 8) {
+                        setPasswordStatus({ message: "La contraseña debe tener al menos 8 caracteres", type: "error" });
+                      } else if (v && v.length >= 8) {
+                        setPasswordStatus({ message: "Contraseña válida", type: "success" });
+                      }
+                    }}
+                    placeholder={editingRut ? "Dejar vacío para no cambiar" : "Ingresá una contraseña"}
+                    required={!editingRut}
+                    style={{ paddingRight: 40, width: "100%" }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((s) => !s)}
+                    aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+                    style={{
+                      position: "absolute",
+                      right: 8,
+                      top: 8,
+                      width: 28,
+                      height: 28,
+                      borderRadius: 6,
+                      border: "none",
+                      background: "transparent",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      cursor: "pointer",
+                    }}
+                  >
+                    <i className={`ti ${showPassword ? "ti-eye-off" : "ti-eye"}`} />
+                  </button>
+                </div>
+                {passwordStatus.message && <span style={statusStyle(passwordStatus.type)}>{passwordStatus.message}</span>}
+              </label>
+
+              <div style={{ gridColumn: "1 / span 2", display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 4 }}>
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  style={{
+                    background: primary,
+                    color: "#fff",
+                    border: "none",
+                    borderRadius: 10,
+                    padding: "10px 16px",
+                    fontWeight: 600,
+                    fontSize: 13,
+                    cursor: submitting ? "not-allowed" : "pointer",
+                    opacity: submitting ? 0.7 : 1,
+                  }}
+                >
+                  <i className={`ti ${editingRut ? "ti-device-floppy" : "ti-user-plus"}`} style={{ marginRight: 8 }} />
+                  {editingRut ? "Guardar cambios" : "Crear usuario"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      <div className="responsive-grid">
+        <section className="card" style={{ padding: 16 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+            <div>
+              <h3 style={{ fontSize: 16, fontWeight: 700, color: "var(--text)", margin: 0 }}>Empleados</h3>
+              <p style={{ fontSize: 12, color: "var(--text2)", marginTop: 3 }}>{empleados.length} usuarios</p>
+            </div>
+          </div>
+
+          {loading ? (
+            <div style={{ color: "var(--text2)", fontSize: 13 }}>Cargando usuarios...</div>
+          ) : empleados.length === 0 ? (
+            <div style={{ color: "var(--text2)", fontSize: 13 }}>No hay empleados registrados.</div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {empleados.map((user) => (
+                <UsuarioCard key={user.rut} user={user} onEdit={handleEdit} onDelete={handleDelete} highlight={editingRut === normalizeRut(user.rut)} />
+              ))}
+            </div>
+          )}
+        </section>
+
+        <section className="card" style={{ padding: 16 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+            <div>
+              <h3 style={{ fontSize: 16, fontWeight: 700, color: "var(--text)", margin: 0 }}>Producción</h3>
+              <p style={{ fontSize: 12, color: "var(--text2)", marginTop: 3 }}>{cocineros.length} usuarios</p>
+            </div>
+          </div>
+
+          {loading ? (
+            <div style={{ color: "var(--text2)", fontSize: 13 }}>Cargando usuarios...</div>
+          ) : cocineros.length === 0 ? (
+            <div style={{ color: "var(--text2)", fontSize: 13 }}>No hay personal de producción registrado.</div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {cocineros.map((user) => (
+                <UsuarioCard key={user.rut} user={user} onEdit={handleEdit} onDelete={handleDelete} highlight={editingRut === normalizeRut(user.rut)} />
+              ))}
+            </div>
+          )}
+        </section>
+      </div>
+      </>
+      )}
+
+      {/* ─── Tab: Horario de Turnos ─────────────────── */}
+      {activeTab === "turnos" && (
+        <div>
+          {/* Filter bar */}
+          <div style={{ display: "flex", gap: 12, marginBottom: 20, flexWrap: "wrap", alignItems: "center" }}>
+            <select
+              className="input-field"
+              value={shiftFilter}
+              onChange={(e) => setShiftFilter(e.target.value)}
+              style={{ flex: "0 1 280px" }}
+            >
+              <option value="">Todos los cajeros</option>
+              {uniqueEmployees.map((emp) => (
+                <option key={emp.rut} value={emp.rut}>{emp.fullName} ({emp.rut})</option>
+              ))}
+            </select>
+            <button
+              onClick={fetchShifts}
+              style={{
+                background: "transparent", border: "1px solid var(--border)", borderRadius: 10,
+                padding: "10px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer",
+                color: "var(--text)", display: "inline-flex", alignItems: "center", gap: 6,
+              }}
+            >
+              <i className="ti ti-refresh" style={{ fontSize: 16 }} /> Actualizar
+            </button>
+          </div>
+
+          {/* Summary cards */}
+          {(shiftFilter || filteredShifts.length > 0) && (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12, marginBottom: 24 }}>
+              <div className="card" style={{ padding: "16px 20px", display: "flex", alignItems: "center", gap: 12 }}>
+                <div style={{ width: 40, height: 40, borderRadius: 10, background: "#dbeafe", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <i className="ti ti-clock-hour-4" style={{ fontSize: 20, color: "#2563eb" }} />
+                </div>
+                <div>
+                  <div style={{ fontSize: 11, color: "var(--text2)", fontWeight: 600, textTransform: "uppercase" }}>Hoy</div>
+                  <div style={{ fontSize: 20, fontWeight: 800, color: "var(--text)" }}>{shiftSummary.daily}</div>
+                </div>
+              </div>
+              <div className="card" style={{ padding: "16px 20px", display: "flex", alignItems: "center", gap: 12 }}>
+                <div style={{ width: 40, height: 40, borderRadius: 10, background: "#ede9fe", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <i className="ti ti-calendar-week" style={{ fontSize: 20, color: "#7c3aed" }} />
+                </div>
+                <div>
+                  <div style={{ fontSize: 11, color: "var(--text2)", fontWeight: 600, textTransform: "uppercase" }}>Semana</div>
+                  <div style={{ fontSize: 20, fontWeight: 800, color: "var(--text)" }}>{shiftSummary.weekly}</div>
+                </div>
+              </div>
+              <div className="card" style={{ padding: "16px 20px", display: "flex", alignItems: "center", gap: 12 }}>
+                <div style={{ width: 40, height: 40, borderRadius: 10, background: "#fef3c7", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <i className="ti ti-calendar-month" style={{ fontSize: 20, color: "#d97706" }} />
+                </div>
+                <div>
+                  <div style={{ fontSize: 11, color: "var(--text2)", fontWeight: 600, textTransform: "uppercase" }}>Mes</div>
+                  <div style={{ fontSize: 20, fontWeight: 800, color: "var(--text)" }}>{shiftSummary.monthly}</div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Shifts table */}
+          {shiftsLoading ? (
+            <div style={{ color: "var(--text2)", fontSize: 13, textAlign: "center", padding: 40 }}>Cargando turnos...</div>
+          ) : filteredShifts.length === 0 ? (
+            <div style={{ color: "var(--text2)", fontSize: 13, textAlign: "center", padding: 40 }}>
+              <i className="ti ti-clock-off" style={{ fontSize: 40, display: "block", marginBottom: 8, opacity: 0.4 }} />
+              No hay turnos registrados{shiftFilter ? " para este empleado" : ""}.
+            </div>
+          ) : (
+            <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                  <thead>
+                    <tr style={{ background: "var(--surface2)", borderBottom: "1px solid var(--border)" }}>
+                      <th style={{ padding: "12px 16px", textAlign: "left", fontWeight: 700, color: "var(--text)", whiteSpace: "nowrap" }}>Empleado</th>
+                      <th style={{ padding: "12px 16px", textAlign: "left", fontWeight: 700, color: "var(--text)", whiteSpace: "nowrap" }}>Fecha</th>
+                      <th style={{ padding: "12px 16px", textAlign: "left", fontWeight: 700, color: "var(--text)", whiteSpace: "nowrap" }}>Entrada</th>
+                      <th style={{ padding: "12px 16px", textAlign: "left", fontWeight: 700, color: "var(--text)", whiteSpace: "nowrap" }}>Salida</th>
+                      <th style={{ padding: "12px 16px", textAlign: "left", fontWeight: 700, color: "var(--text)", whiteSpace: "nowrap" }}>Duración</th>
+                      <th style={{ padding: "12px 16px", textAlign: "center", fontWeight: 700, color: "var(--text)", whiteSpace: "nowrap" }}>Estado</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredShifts.map((s) => {
+                      const openDate = new Date(s.openingDate);
+                      const closeDate = s.closingDate ? new Date(s.closingDate) : null;
+                      const durationMs = closeDate ? closeDate - openDate : Date.now() - openDate;
+                      const dH = Math.floor(durationMs / 3600000);
+                      const dM = Math.floor((durationMs % 3600000) / 60000);
+
+                      return (
+                        <tr key={s.id} style={{ borderBottom: "1px solid var(--border)", transition: "background 0.15s" }}
+                          onMouseEnter={(e) => e.currentTarget.style.background = "var(--surface2)"}
+                          onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
+                        >
+                          <td style={{ padding: "12px 16px", whiteSpace: "nowrap" }}>
+                            <div style={{ fontWeight: 600, color: "var(--text)" }}>{s.OpenedBy?.fullName || "—"}</div>
+                            <div style={{ fontSize: 11, color: "var(--text2)" }}>{s.OpenedBy?.email}</div>
+                          </td>
+                          <td style={{ padding: "12px 16px", color: "var(--text2)", whiteSpace: "nowrap" }}>
+                            {openDate.toLocaleDateString("es-CL", { day: "2-digit", month: "2-digit", year: "numeric" })}
+                          </td>
+                          <td style={{ padding: "12px 16px", color: "var(--text)", fontWeight: 600, whiteSpace: "nowrap" }}>
+                            {openDate.toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit" })}
+                          </td>
+                          <td style={{ padding: "12px 16px", color: "var(--text)", fontWeight: 600, whiteSpace: "nowrap" }}>
+                            {closeDate ? closeDate.toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit" }) : "—"}
+                          </td>
+                          <td style={{ padding: "12px 16px", fontWeight: 700, color: "var(--text)", whiteSpace: "nowrap" }}>
+                            {dH}h {dM}m
+                          </td>
+                          <td style={{ padding: "12px 16px", textAlign: "center" }}>
+                            <span style={{
+                              fontSize: 10, fontWeight: 700, padding: "3px 10px", borderRadius: 999,
+                              background: s.status === "open" ? "#dcfce7" : "#f1f5f9",
+                              color: s.status === "open" ? "#15803d" : "#64748b",
+                            }}>
+                              {s.status === "open" ? "En turno" : "Cerrado"}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function UsuarioCard({ user, onEdit, onDelete, highlight }) {
+  const badge = ROLES[user.role] || { label: user.role, color: "#d0d5dd" };
+
+  return (
+    <article className="user-card"
+      style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        gap: 12,
+        background: highlight ? "rgba(124, 58, 237, 0.08)" : "var(--surface)",
+        borderRadius: 14,
+        border: highlight ? "1px solid rgba(124, 58, 237, 0.35)" : "1px solid var(--border)",
+        padding: "14px 14px",
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
+        <div
+          style={{
+            width: 38,
+            height: 38,
+            borderRadius: "50%",
+            background: badge.color,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            color: "#111827",
+            fontSize: 13,
+            fontWeight: 700,
+            flexShrink: 0,
+          }}
+        >
+          {(user.full_name || user.email || "U")?.[0]?.toUpperCase() || "U"}
+        </div>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontWeight: 700, color: "var(--text)", fontSize: 14, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{user.full_name}</div>
+          <div style={{ color: "var(--text2)", fontSize: 12, marginTop: 2 }}>{user.email}</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6 }}>
+            <span style={{ display: "inline-flex", alignItems: "center", borderRadius: 999, padding: "2px 8px", background: badge.color, color: "#4b1f2f", fontSize: 10, fontWeight: 700 }}>{badge.label}</span>
+            <span style={{ color: "var(--text2)", fontSize: 10 }}>RUT: {user.rut}</span>
+          </div>
+        </div>
+      </div>
+
+      <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+        <button
+          type="button"
+          onClick={() => onEdit(user)}
+          style={{ border: "1px solid var(--border)", background: "#0dad1a", borderRadius: 8, padding: "8px 10px", fontSize: 12, cursor: "pointer", color: "var(--text)" }}
+        >
+          <i className="ti ti-edit" style={{ marginRight: 4 }} />Editar
+        </button>
+        <button
+          type="button"
+          onClick={() => onDelete(user.rut)}
+          style={{ border: "1px solid var(--border)", background: "#ff3a3a", borderRadius: 8, padding: "8px 10px", fontSize: 12, cursor: "pointer", color: "var(--text)" }}
+        >
+          <i className="ti ti-trash" style={{ marginRight: 4 }} />Eliminar
+        </button>
+      </div>
+    </article>
+  );
+}
+
