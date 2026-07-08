@@ -556,6 +556,17 @@ export default function POS() {
 
     setSubmitting(true);
     try {
+      const itemNotes = cart
+        .filter(item => item.notes && item.notes.trim())
+        .map(item => `${item.productName}: ${item.notes.trim()}`)
+        .join(" | ");
+
+      const promoNote = promotionDiscounts.discount > 0 
+        ? `Descuento Promociones: -${fmt(promotionDiscounts.discount)}` 
+        : "";
+
+      const finalNotes = [itemNotes, promoNote].filter(Boolean).join(" | ");
+
       const body = {
         customer: isImmediate ? { fullName: "Mostrador", phone: "00000000", email: null } : {
           fullName: customerName.trim(),
@@ -575,7 +586,7 @@ export default function POS() {
         deliveryDate: deliveryDate ? deliveryDate.toISOString() : null,
         depositAmount: actualDeposit,
         paymentMethod,
-        notes: promotionDiscounts.discount > 0 ? `Descuento Promociones: -${fmt(promotionDiscounts.discount)}` : "",
+        notes: finalNotes,
         couponCode: appliedCoupon?.code || null,
         globalDiscount: Math.round(promotionDiscounts.discount + couponDiscount),
         cashReceived: paymentMethod === "efectivo" ? (parseInt(cashReceived) || 0) : 0,

@@ -253,10 +253,10 @@ export default function Pedidos() {
           <p style={{ marginTop: 12 }}>Cargando pedidos...</p>
         </div>
       ) : (
-        <div className="pedidos-layout" style={{ display: "flex", gap: 20, flex: 1, minHeight: 0 }}>
+        <div className="pedidos-layout">
 
           {/* ═══ COLUMNA IZQUIERDA ═══ */}
-          <aside className="pedidos-sidebar" style={{ display: "flex", flexDirection: "column", gap: 14, minHeight: 0 }}>
+          <aside className="pedidos-sidebar">
             {/* Botón para alternar calendario en móvil */}
             <button
               className="mobile-calendar-toggle"
@@ -505,7 +505,7 @@ export default function Pedidos() {
           </aside>
 
           {/* ═══ COLUMNA DERECHA — TABLA DE PEDIDOS DEL DÍA ═══ */}
-          <div className="pedidos-main card" style={{ padding: 20, flex: "1 1 50%", display: "flex", flexDirection: "column", minHeight: 0 }}>
+          <div className="pedidos-main card">
             <div style={{ marginBottom: 14 }}>
               <h2 style={{
                 fontSize: 20, fontWeight: 700, color: "var(--text)", margin: 0,
@@ -1027,18 +1027,29 @@ export default function Pedidos() {
           flex-direction: column;
           gap: 16px;
           overflow: hidden;
+          flex: 1;
+          min-height: 0;
         }
 
         .pedidos-sidebar {
           margin-bottom: 0;
+          display: flex;
+          flex-direction: column;
+          gap: 14px;
           flex: 1 1 50%;
           min-height: 0;
+          min-width: 0;
+          position: relative;
         }
+        
         .pedidos-main {
           margin-bottom: 16px;
-          padding: 16px !important;
+          padding: 20px;
+          display: flex;
+          flex-direction: column;
           flex: 1 1 50%;
           min-height: 0;
+          min-width: 0;
         }
         
         .mobile-calendar-toggle {
@@ -1049,12 +1060,19 @@ export default function Pedidos() {
         }
         .calendar-card.show {
           display: block;
+          position: absolute;
+          top: 52px;
+          left: 0;
+          right: 0;
+          z-index: 100;
+          box-shadow: 0 10px 40px rgba(0,0,0,0.2);
         }
 
         @media (min-width: 768px) {
           .pedidos-layout {
             display: grid !important;
-            grid-template-columns: 340px 1fr !important;
+            grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) !important;
+            gap: 20px;
             overflow: hidden;
           }
           .pedidos-sidebar,

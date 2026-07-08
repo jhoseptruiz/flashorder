@@ -306,8 +306,8 @@ export default function Cocina() {
           <p style={{ marginTop: 12 }}>Cargando órdenes...</p>
         </div>
       ) : (
-        <div className="kitchen-layout" style={{ display: "flex", gap: 20, flex: 1, minHeight: 0 }}>
-          <aside className="kitchen-sidebar" style={{ display: "flex", flexDirection: "column", gap: 14, minHeight: 0 }}>
+        <div className="kitchen-layout">
+          <aside className="kitchen-sidebar">
             {/* Botón para alternar calendario en móvil */}
             <button
               className="mobile-calendar-toggle"
@@ -472,7 +472,7 @@ export default function Cocina() {
             </div>
           </aside>
 
-          <div className="kitchen-main card" style={{ flex: "1 1 50%", display: "flex", flexDirection: "column", minHeight: 0 }}>
+          <div className="kitchen-main card">
             <div style={{ marginBottom: 14 }}>
               <h2 style={{ fontSize: 20, fontWeight: 700, color: "var(--text)", margin: 0, fontFamily: "Syne, sans-serif" }}>
                 En producción
@@ -652,6 +652,7 @@ export default function Cocina() {
           gap: 16px;
           min-height: 0;
           width: 100%;
+          flex: 1;
           padding-bottom: 20px;
           overflow: hidden;
         }
@@ -661,9 +662,11 @@ export default function Cocina() {
           width: 100%;
           display: flex;
           flex-direction: column;
-          gap: 16px;
+          gap: 14px;
           margin-bottom: 0;
           flex: 1 1 50%;
+          min-width: 0;
+          position: relative;
         }
 
         .kitchen-main {
@@ -674,6 +677,7 @@ export default function Cocina() {
           gap: 16px;
           margin-bottom: 16px;
           flex: 1 1 50%;
+          min-width: 0;
         }
         
         .mobile-calendar-toggle {
@@ -684,6 +688,12 @@ export default function Cocina() {
         }
         .calendar-card.show {
           display: block;
+          position: absolute;
+          top: 52px;
+          left: 0;
+          right: 0;
+          z-index: 100;
+          box-shadow: 0 10px 40px rgba(0,0,0,0.2);
         }
 
         .page-container {
@@ -702,7 +712,7 @@ export default function Cocina() {
         @media (min-width: 768px) {
           .kitchen-layout {
             display: grid !important;
-            grid-template-columns: 1fr 1fr !important;
+            grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) !important;
             gap: 20px;
             margin-bottom: 0;
             overflow: hidden;
