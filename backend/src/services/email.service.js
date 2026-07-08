@@ -79,7 +79,10 @@ export function buildReceiptHtml(order, companyInfo = {}) {
     const subtotal = formatMoney(item.subtotal || quantity * (item.unitPrice || 0));
     return `
       <tr>
-        <td style="padding: 10px 12px; border-bottom: 1px solid #e5e7eb;">${description}</td>
+        <td style="padding: 10px 12px; border-bottom: 1px solid #e5e7eb;">
+          <div>${description}</div>
+          ${item.components && item.components.length > 0 ? `<div style="margin-top: 4px; padding-left: 8px; font-size: 11px; color: #6b7280; font-style: italic;">` + item.components.map(c => `<div>- ${c.category}: ${c.productName} (${c.variantName})</div>`).join('') + `</div>` : ''}
+        </td>
         <td style="padding: 10px 12px; border-bottom: 1px solid #e5e7eb; text-align: center;">${quantity}</td>
         <td style="padding: 10px 12px; border-bottom: 1px solid #e5e7eb; text-align: right;">${unitPrice}</td>
         <td style="padding: 10px 12px; border-bottom: 1px solid #e5e7eb; text-align: right;">${subtotal}</td>

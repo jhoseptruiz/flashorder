@@ -1,23 +1,10 @@
 "use strict";
 import { Router } from "express";
-import { loginService, refreshTokenService } from "../services/auth.service.js";
-import { jwtDurationToMs } from "../helpers/jwt.helper.js";
+import { loginService } from "../services/auth.service.js";
 import { createAuditLog } from "../helpers/audit.helper.js";
 import { authenticate } from "../middlewares/authentication.middleware.js";
 
 const router = Router();
-
-// Obtener la duración del refresh token desde variables de entorno
-const REFRESH_TOKEN_EXPIRES = process.env.REFRESH_TOKEN_EXPIRES || "3d";
-
-let REFRESH_COOKIE_MAX_AGE;
-try {
-  REFRESH_COOKIE_MAX_AGE = jwtDurationToMs(REFRESH_TOKEN_EXPIRES);
-  console.log(`=> Refresh token expires: ${REFRESH_TOKEN_EXPIRES} (${REFRESH_COOKIE_MAX_AGE}ms)`);
-} catch (error) {
-  console.error(`Error al parsear REFRESH_TOKEN_EXPIRES: ${REFRESH_TOKEN_EXPIRES}`, error.message);
-  REFRESH_COOKIE_MAX_AGE = 3 * 24 * 60 * 60 * 1000; // fallback a 3 días
-}
 
 // POST 
 router.post("/login", async (req, res) => {
@@ -53,21 +40,9 @@ router.post("/login", async (req, res) => {
       { email, fullName: result.user.full_name }
     );
 
-    // Guardar refresh token en cookie segura
-    try {
-      res.cookie("refreshToken", result.refreshToken, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production" && !req.headers.origin?.includes("localhost"),
-        sameSite: "lax",
-        maxAge: REFRESH_COOKIE_MAX_AGE,
-      });
-    } catch (cookieError) {
-      console.error("Error al establecer cookie:", cookieError);
-    }
-
     return res.status(200).json({
       message: "Login exitoso",
-      accessToken: result.accessToken,
+      token: result.token,
       user: result.user,
     });
   } catch (error) {
@@ -76,57 +51,30 @@ router.post("/login", async (req, res) => {
   }
 });
 
-// POST 
-router.post("/refresh", async (req, res) => {
+// POST /api/auth/logout
+router.post("/logout", authenticate, async (req, res) => {
   try {
-    const refreshToken = req.cookies.refreshToken;
+    const userRut = req.user.rut;
 
-    if (!refreshToken) {
-      return res.status(401).json({ error: "Refresh token no encontrado" });
-    }
+    await createAuditLog(
+      userRut,
+      "LOGOUT",
+      "users",
+      userRut,
+      null,
+      { details: "El usuario cerró sesión manualmente" }
+    );
 
-    const result = await refreshTokenService(refreshToken);
-
-    if (result.error) {
-      return res.status(result.status).json({ error: result.error });
-    }
-
-    res.cookie("refreshToken", result.refreshToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production" && !req.headers.origin?.includes("localhost"),
-      sameSite: "lax",
-      maxAge: REFRESH_COOKIE_MAX_AGE,
-    });
-
-    return res.status(200).json({
-      message: "Token refrescado",
-      accessToken: result.accessToken,
-    });
+    res.json({ message: "Logout exitoso y auditoría registrada" });
   } catch (error) {
-    console.error("Error en POST /auth/refresh:", error);
-    return res.status(500).json({ error: "Error interno del servidor" });
+    console.error("Error en logout:", error);
+    res.status(500).json({ error: "Error al cerrar sesión" });
   }
 });
 
-// POST 
-router.post("/logout", authenticate, async (req, res) => {
-  try {
-    // Registrar auditoría de cierre de sesión
-    await createAuditLog(
-      req.user.rut,
-      "LOGOUT",
-      "users",
-      req.user.rut,
-      null,
-      null
-    );
-  } catch {
-    // Si falla la auditoría, continuamos con el logout
-  }
-
-  res.clearCookie("refreshToken");
-  return res.status(200).json({ message: "Logout exitoso" });
+// GET /me -> Obtener perfil del usuario autenticado
+router.get("/me", authenticate, (req, res) => {
+  res.json({ user: req.user });
 });
 
 export default router;
-

@@ -28,7 +28,7 @@ function AppContent() {
   return (
     <div
       className={dark ? "dark-mode" : "light-mode"}
-      style={{ ...cssVars, minHeight: "100vh" }}
+      style={{ ...cssVars, minHeight: "100dvh" }}
     >
       {toast && (
         <div className={`toast toast--${toast.type}`}>
@@ -48,9 +48,9 @@ function AppContent() {
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
           
           <Route element={<ProtectedRoute allowedRoles={["admin", "empleado"]} />}>
-            <Route path="/dashboard" element={<Home />} />
             <Route path="/pos" element={<POS />} />
             <Route path="/invoices" element={<Invoices />} />
+            <Route path="/orders" element={<Pedidos />} />
           </Route>
 
           <Route element={<ProtectedRoute allowedRoles={["admin", "cocinero"]} />}>
@@ -59,11 +59,11 @@ function AppContent() {
 
           <Route element={<ProtectedRoute allowedRoles={["admin", "empleado", "cocinero"]} />}>
             <Route path="/perfil" element={<Perfil />} />
-            <Route path="/orders" element={<Pedidos />} />
             <Route path="/auditoria" element={<Auditoria />} />
           </Route>
 
           <Route element={<ProtectedRoute allowedRoles={["admin"]} />}>
+            <Route path="/dashboard" element={<Home />} />
             <Route path="/usuarios" element={<Usuarios />} />
             <Route path="/catalogo" element={<Catalogo/>}/>
             <Route path="/config" element={<Config />} />

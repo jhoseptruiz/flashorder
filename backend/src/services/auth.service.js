@@ -6,24 +6,16 @@ import { JWT_SECRET } from "../config/configEnv.js";
 
 // jose requiere la clave como Uint8Array
 const ACCESS_SECRET  = new TextEncoder().encode(JWT_SECRET);
-const REFRESH_SECRET = new TextEncoder().encode(JWT_SECRET + "_refresh");
-const ACCESS_EXPIRES  = process.env.ACCESS_TOKEN_EXPIRES || "15m";
-const REFRESH_EXPIRES = process.env.REFRESH_TOKEN_EXPIRES || "3d";
+const ACCESS_EXPIRES  = process.env.ACCESS_TOKEN_EXPIRES || "1d";
 
-async function generateTokens(payload) {
-  const accessToken = await new SignJWT(payload)
+export async function generateToken(payload) {
+  const token = await new SignJWT(payload)
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
     .setExpirationTime(ACCESS_EXPIRES)
     .sign(ACCESS_SECRET);
 
-  const refreshToken = await new SignJWT(payload)
-    .setProtectedHeader({ alg: "HS256" })
-    .setIssuedAt()
-    .setExpirationTime(REFRESH_EXPIRES)
-    .sign(REFRESH_SECRET);
-
-  return { accessToken, refreshToken };
+  return token;
 }
 
 export async function loginService(email, password) {
@@ -44,40 +36,15 @@ export async function loginService(email, password) {
     }
 
     const payload = { rut: user.rut, role: user.role };
-    const { accessToken, refreshToken } = await generateTokens(payload);
+    const token = await generateToken(payload);
 
     //Formatear el usuario para omitir el hash
     const userData = user.toJSON();
     delete userData.passwordHash;
 
-    return { accessToken, refreshToken, user: userData };
+    return { token, user: userData };
   }catch (error) {
     console.error("[loginService]", error, error.message, error.stack);
     return { error: "Error interno del servidor", status: 500 };
-  }
-}
-
-export async function refreshTokenService(token) {
-  try {
-    const { payload } = await jwtVerify(token, REFRESH_SECRET, {
-      algorithms: ["HS256"],
-    });
-
-    // Validar en la BD que el usuario siga existiendo y esté activo
-    const user = await User.findOne({
-      where: { rut: payload.rut, isActive: true }
-    });
-
-    if (!user) {
-      return { error: "Usuario inactivo o no encontrado", status: 401 };
-    }
-
-    // Usamos el rol actualizado de la BD por si cambió
-    const newPayload = { rut: user.rut, role: user.role };
-    const { accessToken, refreshToken } = await generateTokens(newPayload);
-
-    return { accessToken, refreshToken };
-  } catch (err) {
-    return { error: "Refresh token inválido o expirado", status: 401 };
   }
 }

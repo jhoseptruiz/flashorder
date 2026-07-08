@@ -149,7 +149,14 @@ export default function Invoices() {
                 {order.OrderItems?.slice(0, 3).map((item) => (
                   <div key={item.id} style={{ borderRadius: 12, background: "var(--surface2)", padding: 10, fontSize: 12, color: "var(--text2)" }}>
                     <strong style={{ color: "var(--text)", display: "block", marginBottom: 4 }}>{item.productNameSnapshot}</strong>
-                    {item.quantity} x {formatCLP(item.unitPrice)}
+                    <div style={{ marginBottom: 4 }}>{item.quantity} x {formatCLP(item.unitPrice)}</div>
+                    {item.components && item.components.length > 0 && (
+                      <div style={{ fontSize: 10, color: "var(--text2)", fontStyle: "italic", borderTop: "1px dashed var(--border)", paddingTop: 4 }}>
+                        {item.components.map((c, i) => (
+                          <div key={i}>- {c.category}: {c.productName}</div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

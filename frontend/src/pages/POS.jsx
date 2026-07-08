@@ -3,6 +3,7 @@ import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
 import { useCashRegister } from "../context/CashRegisterContext";
 import { apiFetch } from "../utils/apiFetch";
+import { v4 as uuidv4 } from "uuid";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const fmt = (n) => `$${Number(n || 0).toLocaleString("es-CL")}`;
@@ -63,6 +64,7 @@ export default function POS() {
 
   // Carrito
   const [cart, setCart] = useState([]);
+  const [showMobileCart, setShowMobileCart] = useState(false);
 
   // Cupón
   const [couponCode, setCouponCode] = useState("");
@@ -87,22 +89,32 @@ export default function POS() {
   const [showCheckout, setShowCheckout] = useState(false);
   const [cashReceived, setCashReceived] = useState("");
 
+  // Entrega inmediata
+  const [isImmediate, setIsImmediate] = useState(true);
+
+  // Business Hours
+  const [businessHours, setBusinessHours] = useState(null);
+
   // ── Cargar catálogo ─────────────────────────────────────────────────────────
   useEffect(() => {
     const load = async () => {
       try {
         setLoadingCatalog(true);
-        const [catRes, prodRes, promoRes] = await Promise.all([
+        const [catRes, prodRes, promoRes, configRes] = await Promise.all([
           apiFetch("/api/catalog/categories"),
           apiFetch("/api/catalog/products"),
           apiFetch("/api/catalog/promotions"),
+          apiFetch("/api/config/business-hours").catch(() => ({ ok: false }))
         ]);
         const catData  = await catRes.json();
         const prodData = await prodRes.json();
         const promoData = promoRes.ok ? await promoRes.json() : [];
+        const configData = configRes.ok ? await configRes.json() : null;
+        
         if (catRes.ok) setCategories(catData);
         if (prodRes.ok) setProducts(prodData);
         setPromotions(Array.isArray(promoData) ? promoData.filter(p => p.isActive) : []);
+        if (configData) setBusinessHours(configData);
       } catch (e) {
         console.error("Error cargando catálogo:", e);
       } finally {
@@ -391,6 +403,17 @@ export default function POS() {
 
       const variantDesc = parts.join(" | ");
       
+      const componentsData = compositionRules.flatMap((rule) => {
+        const selections = compositeSelections[rule.id] || [];
+        const catName = rule.AllowedCategory?.name || "Opción";
+        return selections.map(s => ({
+          category: catName,
+          productName: s.product.name,
+          variantName: s.variant.variantName,
+          price: s.variant.price
+        }));
+      });
+      
       const componentsPrice = compositionRules.reduce((sum, rule) => {
         const selections = compositeSelections[rule.id] || [];
         return sum + selections.reduce((s, sel) => s + sel.variant.price, 0);
@@ -417,8 +440,9 @@ export default function POS() {
           discountLabel,
           subtotal: finalPrice * itemQty,
           notes: itemNote,
-          groupId: crypto.randomUUID(),
+          groupId: uuidv4(),
           isComposite: true,
+          components: componentsData,
         },
       ]);
     } else {
@@ -448,6 +472,7 @@ export default function POS() {
           notes: itemNote,
           groupId: null,
           isComposite: false,
+          components: null,
         },
       ]);
     }
@@ -498,19 +523,57 @@ export default function POS() {
   // ── Guardar pedido ──────────────────────────────────────────────────────────
   const handleSubmitOrder = async () => {
     if (cart.length === 0) { showToast("Agrega productos al carrito", "error"); return; }
-    if (!customerName.trim()) { showToast("Ingresa el nombre del cliente", "error"); return; }
-    if (!customerPhone.trim()) { showToast("Ingresa el teléfono del cliente", "error"); return; }
+    
+    if (!isImmediate) {
+      if (!customerName.trim()) { showToast("Ingresa el nombre del cliente", "error"); return; }
+      if (!customerPhone.trim()) { showToast("Ingresa el teléfono del cliente", "error"); return; }
+    }
 
-    const deliveryDate = buildDeliveryDate();
+    const deliveryDate = isImmediate ? null : buildDeliveryDate();
+
+    if (deliveryDate && businessHours) {
+      const day = deliveryDate.getDay();
+      if (!businessHours.workDays.includes(day)) {
+        showToast("El día seleccionado no es un día laboral", "error");
+        return;
+      }
+      const hh = deliveryDate.getHours().toString().padStart(2, "0");
+      const mm = deliveryDate.getMinutes().toString().padStart(2, "0");
+      const timeStr = `${hh}:${mm}`;
+      if (timeStr < businessHours.openTime || timeStr > businessHours.closeTime) {
+        showToast(`El horario de atención es de ${businessHours.openTime} a ${businessHours.closeTime}`, "error");
+        return;
+      }
+    }
+
+    if (isImmediate && paymentMethod === "efectivo") {
+      const received = parseInt(cashReceived) || 0;
+      if (received < finalTotal) {
+        showToast("El efectivo recibido debe cubrir el total del pedido", "error");
+        return;
+      }
+    }
 
     setSubmitting(true);
     try {
+      const itemNotes = cart
+        .filter(item => item.notes && item.notes.trim())
+        .map(item => `${item.productName}: ${item.notes.trim()}`)
+        .join(" | ");
+
+      const promoNote = promotionDiscounts.discount > 0 
+        ? `Descuento Promociones: -${fmt(promotionDiscounts.discount)}` 
+        : "";
+
+      const finalNotes = [itemNotes, promoNote].filter(Boolean).join(" | ");
+
       const body = {
-        customer: {
+        customer: isImmediate ? { fullName: "Mostrador", phone: "00000000", email: null } : {
           fullName: customerName.trim(),
           phone: customerPhone.trim(),
           email: customerEmail.trim() || null,
         },
+        status: isImmediate ? "entregado" : "pendiente",
         items: cart.map((item) => ({
           variantId: item.variantId,
           productName: item.productName,
@@ -518,11 +581,12 @@ export default function POS() {
           quantity: item.quantity,
           unitPrice: item.unitPrice,
           groupId: item.groupId,
+          components: item.components || null,
         })),
         deliveryDate: deliveryDate ? deliveryDate.toISOString() : null,
         depositAmount: actualDeposit,
         paymentMethod,
-        notes: promotionDiscounts.discount > 0 ? `Descuento Promociones: -${fmt(promotionDiscounts.discount)}` : "",
+        notes: finalNotes,
         couponCode: appliedCoupon?.code || null,
         globalDiscount: Math.round(promotionDiscounts.discount + couponDiscount),
         cashReceived: paymentMethod === "efectivo" ? (parseInt(cashReceived) || 0) : 0,
@@ -572,7 +636,7 @@ export default function POS() {
     grid:      { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: 12 },
     card:      { background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, padding: 12, cursor: "pointer", transition: "all 0.18s", textAlign: "center" },
     cardImg:   { width: "100%", height: 100, borderRadius: 8, background: "var(--surface2)", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 8, fontSize: 32, color: "var(--text2)" },
-    overlay:   { position: "fixed", inset: 0, background: "rgba(15, 23, 42, 0.54)", backdropFilter: "blur(2px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, padding: 20 },
+    overlay:   { position: "fixed", inset: 0, background: "rgba(15, 23, 42, 0.54)", backdropFilter: "blur(2px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 110, padding: 20 },
     modal:     { background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 14, padding: 24, width: "min(520px, 100%)", boxShadow: "0 28px 80px rgba(15, 23, 42, 0.32)", position: "relative" },
     label:     { display: "flex", flexDirection: "column", gap: 6, fontSize: 12, color: "var(--text2)" },
     btnPrimary: (disabled) => ({ background: primary, color: "#fff", border: "none", borderRadius: 10, padding: "12px 20px", fontWeight: 700, fontSize: 13, cursor: disabled ? "not-allowed" : "pointer", opacity: disabled ? 0.7 : 1, fontFamily: "'DM Sans', sans-serif", width: "100%" }),
@@ -582,9 +646,20 @@ export default function POS() {
 
   // ── RENDER ──────────────────────────────────────────────────────────────────
   const cajaAbierta = !!activeSession;
+  const cartTotalQty = cart.reduce((sum, item) => sum + item.quantity, 0);
 
   return (
     <div style={S.layout} className="pos-layout">
+      {/* Botón flotante para carrito en móvil */}
+      <button 
+        className="mobile-cart-toggle" 
+        onClick={() => setShowMobileCart(true)}
+      >
+        <i className="ti ti-shopping-cart" style={{ fontSize: 24 }} />
+        {cartTotalQty > 0 && (
+          <span className="cart-badge">{cartTotalQty}</span>
+        )}
+      </button>
       {/* ═══ BLOQUEO SI CAJA CERRADA ═══ */}
       {!cajaAbierta && (
         <div style={{
@@ -696,8 +771,43 @@ export default function POS() {
       </div>
 
       {/* ═══ PANEL DERECHO — PEDIDO ═══ */}
-      <div style={S.sidebar} className="pos-sidebar">
-        <h2 style={{ fontFamily: "Syne, sans-serif", fontSize: 20, fontWeight: 700, color: "var(--text)", margin: 0, marginBottom: 8 }}>Pedido</h2>
+      <div className={`pos-sidebar-container ${showMobileCart ? "show" : ""}`} onClick={() => setShowMobileCart(false)}>
+        <div style={S.sidebar} className="pos-sidebar" onClick={(e) => e.stopPropagation()}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+            <h2 style={{ fontFamily: "Syne, sans-serif", fontSize: 20, fontWeight: 700, color: "var(--text)", margin: 0 }}>
+              Pedido
+              <button 
+                className="close-cart-btn" 
+                onClick={() => setShowMobileCart(false)}
+                style={{ marginLeft: 10, background: "transparent", border: "none", color: "var(--text)", fontSize: 18, cursor: "pointer" }}
+              >
+                <i className="ti ti-x" />
+              </button>
+            </h2>
+          
+          <div style={{ display: "flex", background: "var(--surface2)", borderRadius: 20, padding: 2 }}>
+            <button
+              onClick={() => setIsImmediate(true)}
+              style={{
+                background: isImmediate ? primary : "transparent",
+                color: isImmediate ? "#fff" : "var(--text2)",
+                border: "none", borderRadius: 18, padding: "4px 12px", fontSize: 11, fontWeight: 700, cursor: "pointer", transition: "all 0.2s"
+              }}
+            >
+              Inmediata
+            </button>
+            <button
+              onClick={() => setIsImmediate(false)}
+              style={{
+                background: !isImmediate ? primary : "transparent",
+                color: !isImmediate ? "#fff" : "var(--text2)",
+                border: "none", borderRadius: 18, padding: "4px 12px", fontSize: 11, fontWeight: 700, cursor: "pointer", transition: "all 0.2s"
+              }}
+            >
+              Programada
+            </button>
+          </div>
+        </div>
 
         {/* Items del carrito */}
         <div style={{ flex: 1, overflow: "auto", minHeight: 80 }}>
@@ -713,7 +823,15 @@ export default function POS() {
                   <div style={{ fontWeight: 600, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                     {item.productName}
                   </div>
-                  <div style={{ fontSize: 11, color: "var(--text2)" }}>{item.variantName}</div>
+                  {!item.isComposite ? (
+                    <div style={{ fontSize: 11, color: "var(--text2)" }}>{item.variantName}</div>
+                  ) : (
+                    <div style={{ fontSize: 10, color: "var(--text2)", display: "flex", flexDirection: "column", gap: 2, marginTop: 2 }}>
+                      {item.components && item.components.map((c, idx) => (
+                        <div key={idx}>- {c.category}: {c.productName}</div>
+                      ))}
+                    </div>
+                  )}
                   {item.discountAmount > 0 && item.discountLabel && (
                     <div style={{ fontSize: 10, fontWeight: 700, color: "#16a34a", marginTop: 2 }}>
                       <i className="ti ti-discount-2" style={{ marginRight: 4 }} />
@@ -809,18 +927,20 @@ export default function POS() {
             <span>{fmt(finalTotal)}</span>
           </div>
 
-          <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, marginTop: 4 }}>
-            <span style={{ color: "var(--text2)", fontWeight: 600 }}>Abono</span>
-            <input
-              className="input-field"
-              type="number"
-              placeholder={fmt(finalTotal)}
-              value={deposit}
-              onChange={(e) => setDeposit(e.target.value)}
-              style={{ flex: 1, padding: "6px 10px" }}
-              min="0"
-            />
-          </div>
+          {!isImmediate && (
+            <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, marginTop: 4 }}>
+              <span style={{ color: "var(--text2)", fontWeight: 600 }}>Abono</span>
+              <input
+                className="input-field"
+                type="number"
+                placeholder={fmt(finalTotal)}
+                value={deposit}
+                onChange={(e) => setDeposit(e.target.value)}
+                style={{ flex: 1, padding: "6px 10px" }}
+                min="0"
+              />
+            </div>
+          )}
 
           <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}>
             <span style={{ color: "var(--text2)", fontWeight: 600, whiteSpace: "nowrap" }}>Método de pago</span>
@@ -863,12 +983,19 @@ export default function POS() {
           <button
             style={S.btnPrimary(submitting || cart.length === 0)}
             disabled={submitting || cart.length === 0}
-            onClick={() => setShowCheckout(true)}
+            onClick={() => {
+              if (isImmediate) {
+                handleSubmitOrder();
+              } else {
+                setShowCheckout(true);
+              }
+            }}
           >
-            {submitting ? "Guardando..." : "Guardar Pedido"}
+            {submitting ? "Guardando..." : (isImmediate ? "Confirmar y Pagar" : "Continuar")}
           </button>
         </div>
       </div>
+    </div>
 
       {/* ═══ MODAL PRODUCTO SIMPLE / COMPUESTO ═══ */}
       {selectedProduct && (
@@ -1038,11 +1165,27 @@ export default function POS() {
             <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
               <label style={S.label}>
                 Nombre completo:
-                <input className="input-field" value={customerName} onChange={(e) => setCustomerName(e.target.value)} placeholder="Nombre completo" />
+                <input
+                  className="input-field"
+                  value={customerName}
+                  onChange={(e) => {
+                    const val = e.target.value.replace(/[^a-zA-Z\sñÑáéíóúÁÉÍÓÚ]/g, "");
+                    setCustomerName(val);
+                  }}
+                  placeholder="Nombre completo"
+                />
               </label>
               <label style={S.label}>
                 Teléfono:
-                <input className="input-field" value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} placeholder="Teléfono" />
+                <input
+                  className="input-field"
+                  value={customerPhone}
+                  onChange={(e) => {
+                    const val = e.target.value.replace(/\D/g, "");
+                    setCustomerPhone(val);
+                  }}
+                  placeholder="Teléfono"
+                />
               </label>
               <label style={S.label}>
                 Gmail: <span style={{ fontWeight: 400, fontStyle: "italic" }}>(opcional)</span>
@@ -1086,9 +1229,17 @@ export default function POS() {
                 <div style={{ display: "flex", flexDirection: "column", gap: 8, fontSize: 12, color: "var(--text2)", flex: 1 }}>
                   <span style={{ fontWeight: 600 }}>Hora retiro:</span>
                   <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                    <input className="input-field" value={deliveryHour} onChange={(e) => setDeliveryHour(e.target.value)} style={{ width: 50, textAlign: "center", padding: "6px 8px" }} maxLength={2} />
+                    <input className="input-field" value={deliveryHour} onChange={(e) => {
+                      let val = e.target.value.replace(/\D/g, "");
+                      if (val !== "" && parseInt(val) > 12) val = "12";
+                      setDeliveryHour(val);
+                    }} style={{ width: 50, textAlign: "center", padding: "6px 8px" }} maxLength={2} />
                     <span>:</span>
-                    <input className="input-field" value={deliveryMin} onChange={(e) => setDeliveryMin(e.target.value)} style={{ width: 50, textAlign: "center", padding: "6px 8px" }} maxLength={2} />
+                    <input className="input-field" value={deliveryMin} onChange={(e) => {
+                      let val = e.target.value.replace(/\D/g, "");
+                      if (val !== "" && parseInt(val) > 59) val = "59";
+                      setDeliveryMin(val);
+                    }} style={{ width: 50, textAlign: "center", padding: "6px 8px" }} maxLength={2} />
                   </div>
                   <div style={{ display: "flex", gap: 4, marginTop: 4 }}>
                     {["AM", "PM"].map((v) => (
@@ -1125,6 +1276,88 @@ export default function POS() {
           </div>
         </div>
       )}
+
+      <style>{`
+        .pos-layout {
+          display: block;
+        }
+        .pos-sidebar-container {
+          display: none;
+        }
+        .mobile-cart-toggle {
+          position: fixed;
+          bottom: 20px;
+          right: 20px;
+          background: ${primary};
+          color: white;
+          width: 56px;
+          height: 56px;
+          border-radius: 50%;
+          border: none;
+          box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          cursor: pointer;
+          z-index: 40;
+        }
+        .cart-badge {
+          position: absolute;
+          top: -4px;
+          right: -4px;
+          background: #ef4444;
+          color: white;
+          font-size: 11px;
+          font-weight: bold;
+          border-radius: 10px;
+          padding: 2px 6px;
+          border: 2px solid var(--background);
+        }
+
+        /* Mobile specific styles */
+        @media (max-width: 767px) {
+          .pos-sidebar-container.show {
+            display: flex;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 100;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+          }
+          .pos-sidebar {
+            width: 100%;
+            max-width: 400px;
+            max-height: 90vh;
+            border-left: none !important;
+            border-radius: 16px !important;
+          }
+          .close-cart-btn {
+            display: inline-block !important;
+          }
+        }
+
+        /* Desktop specific styles */
+        @media (min-width: 768px) {
+          .pos-layout {
+            display: flex;
+          }
+          .pos-sidebar-container {
+            display: block;
+            flex: 0 0 340px;
+          }
+          .pos-sidebar {
+            height: 100%;
+          }
+          .mobile-cart-toggle {
+            display: none;
+          }
+          .close-cart-btn {
+            display: none !important;
+          }
+        }
+      `}</style>
     </div>
   );
 }

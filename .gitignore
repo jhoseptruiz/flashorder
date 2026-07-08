@@ -4,6 +4,7 @@
 
 # Dependencias
 node_modules/
+.pnpm-store/
 
 # Variables de entorno (NUNCA subir al repo)
 .env

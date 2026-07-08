@@ -36,6 +36,20 @@ ordersRouter.get(
   ordersController.getOrderByIdController
 );
 
+// Cancelar una orden (Producción o Empleado)
+ordersRouter.post(
+  "/:orderId/cancel",
+  authorizeRoles("admin", "cocinero", "empleado"),
+  ordersController.cancelOrderController
+);
+
+// Actualizar información de cancelación (Empleado confirma devolución)
+ordersRouter.put(
+  "/:orderId/cancel",
+  authorizeRoles("admin", "empleado"),
+  ordersController.updateCancelOrderController
+);
+
 // ── Rutas para el Empleado ────────────────────────────────────────────────────
 
 // Todos los pedidos activos (excluye entregado) con filtro opcional de fechas

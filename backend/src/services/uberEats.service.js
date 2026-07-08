@@ -127,10 +127,10 @@ export async function processUberOrder(payload) {
       });
     }
 
-    console.log(`[UberEats] ✅ Pedido ${externalOrderId} creado exitosamente (${orderItemsData.length} items, total: $${totalAmount})`);
+    console.log(`[UberEats] Pedido ${externalOrderId} creado exitosamente (${orderItemsData.length} items, total: $${totalAmount})`);
     return order;
   } catch (error) {
-    console.error("[UberEats] ❌ Error procesando pedido:", error);
+    console.error("[UberEats] Error procesando pedido:", error);
     throw error;
   }
 }

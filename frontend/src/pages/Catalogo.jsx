@@ -332,7 +332,7 @@ export default function Catalogo() {
           <p style={{ fontSize: 14, color: "var(--text2)", marginTop: 4 }}>
             Gestiona las categorías y productos de tu negocio
           </p>
-          <div style={{ display: "flex", gap: 16, marginTop: 14 }}>
+          <div className="stats-container" style={{ display: "flex", gap: 16, marginTop: 14 }}>
             <StatBadge icon="ti-package" label="Productos" value={stats.total} color={primary} />
             <StatBadge icon="ti-circle-check" label="Activos" value={stats.active} color="#16a34a" />
             <StatBadge icon="ti-category" label="Categorías" value={stats.categories} color="#6366f1" />
@@ -351,7 +351,7 @@ export default function Catalogo() {
       </div>
 
       {/* ─── Tabs ────────────────────────────────────── */}
-      <div style={{ display: "flex", gap: 0, borderBottom: "2px solid var(--border)", marginBottom: 24 }}>
+      <div className="tabs-container" style={{ display: "flex", gap: 0, borderBottom: "2px solid var(--border)", marginBottom: 24 }}>
         {["productos", "categorias", "cupones", "promociones"].map((tab) => (
           <button
             key={tab}
@@ -382,7 +382,7 @@ export default function Catalogo() {
       {activeTab === "productos" && (
         <>
           {/* Search + Filter bar */}
-          <div style={{ display: "flex", gap: 12, marginBottom: 24, flexWrap: "wrap" }}>
+          <div className="filters-container" style={{ display: "flex", gap: 12, marginBottom: 24, flexWrap: "wrap" }}>
             <div style={{ position: "relative", flex: "1 1 240px" }}>
               <i className="ti ti-search" style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", fontSize: 17, color: "var(--text2)" }} />
               <input
@@ -549,6 +549,56 @@ export default function Catalogo() {
           onSave={savePromo}
         />
       )}
+
+      <style>{`
+        @media (max-width: 767px) {
+          .page-container {
+            padding: 0 16px !important;
+          }
+          /* Stats */
+          .stats-container {
+            display: grid !important;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px !important;
+            margin-top: 16px;
+          }
+          /* Tabs */
+          .tabs-container {
+            flex-wrap: nowrap !important;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+            padding-bottom: 4px;
+          }
+          .tabs-container > button {
+            white-space: nowrap;
+            font-size: 14px !important;
+            padding: 11px 16px !important;
+          }
+          /* Filters */
+          .filters-container {
+            flex-direction: column !important;
+          }
+          .filters-container > * {
+            flex: unset !important;
+            width: 100% !important;
+          }
+          /* Grid of products / categories */
+          div[style*="grid-template-columns: repeat(auto-fill"] {
+            grid-template-columns: 1fr !important;
+          }
+          /* Modals */
+          .card[style*="width: min(520px"] {
+            width: 95% !important;
+            padding: 16px !important;
+            max-height: 90vh;
+            overflow-y: auto;
+          }
+          /* Modal internal grids */
+          form > div[style*="grid-template-columns: 1fr 1fr"] {
+            grid-template-columns: 1fr !important;
+          }
+        }
+      `}</style>
     </div>
   );
 }

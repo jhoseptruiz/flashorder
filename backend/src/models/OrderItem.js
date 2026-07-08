@@ -14,6 +14,10 @@ const OrderItem = sequelize.define("OrderItem", {
     type: DataTypes.STRING,
     allowNull: false,
   },
+  variantNameSnapshot: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
   quantity: {
     type: DataTypes.INTEGER,
     allowNull: false,
@@ -24,6 +28,10 @@ const OrderItem = sequelize.define("OrderItem", {
   },
   externalItemId: {
     type: DataTypes.STRING,
+  },
+  components: {
+    type: DataTypes.JSON,
+    allowNull: true,
   },
   subtotal: {
     type: DataTypes.INTEGER,
